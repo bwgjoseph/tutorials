@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <!-- Create a appender to output JSON log format -->
+    <appender name="JSON" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder class="net.logstash.logback.encoder.LogstashEncoder"/>
+    </appender>
+
+
+    <!-- Define different configuration for different profiles -->
+    <springProfile name="default">
+        <!-- Do not include base.xml unless you intend for multiple root logger appender -->
+        <!-- <include resource="org/springframework/boot/logging/logback/base.xml" /> -->
+
+        <include resource="org/springframework/boot/logging/logback/defaults.xml" />
+        <include resource="org/springframework/boot/logging/logback/console-appender.xml" />
+
+        <logger name="com.bwgjoseph.springlogback" additivity="false" level="debug">
+            <appender-ref ref="CONSOLE" />
+        </logger>
+
+        <root level="INFO">
+            <appender-ref ref="CONSOLE" />
+        </root>
+    </springProfile>
+
+    <!-- For multiple profiles, use commas to separate profile name -->
+    <springProfile name="staging, production">
+        <logger name="com.bwgjoseph.springlogback" additivity="false" level="warn">
+            <appender-ref ref="JSON" />
+        </logger>
+        <root level="info">
+            <appender-ref ref="JSON" />
+        </root>
+    </springProfile>
+
+</configuration>
