@@ -1,0 +1,10 @@
+logging:
+  level:
+    org:
+      springframework:
+        security: TRACE
+        # this will display Mapping filters logs
+        boot:
+          web:
+            servlet:
+              ServletContextInitializerBeans: DEBUG
