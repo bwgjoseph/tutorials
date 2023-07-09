@@ -1,0 +1,10 @@
+spring:
+  autoconfigure:
+    # to prevent spring from generating default password, and that we don't actually use spring built-in UDS
+    exclude: org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration
+
+# logging:
+#   level:
+#     org:
+#       springframework:
+#         security: TRACE
