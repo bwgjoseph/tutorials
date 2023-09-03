@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<!-- Required -->
+	<modelVersion>4.0.0</modelVersion>
+
+	<!-- This 3 properties also known as Coordinates -->
+	<groupId>com.bwgjoseph</groupId>
+	<artifactId>maven-101-basics</artifactId>
+	<version>0.0.1-SNAPSHOT</version>
+
+	<!-- Optional -->
+	<name>maven-101-basics</name>
+	<description>Maven 101 Basics</description>
+
+	<build>
+		<plugins>
+			<plugin>
+				<groupId>com.diffplug.spotless</groupId>
+				<artifactId>spotless-maven-plugin</artifactId>
+				<version>2.39.0</version>
+				<executions>
+					<execution>
+					  <id>spotless-compile-check</id>
+					  <phase>compile</phase>
+					  <goals>
+						<goal>check</goal>
+					  </goals>
+					</execution>
+				  </executions>
+			  </plugin>
+		</plugins>
+	</build>
+
+	<profiles>
+		<profile>
+			<id>skip-test</id>
+			<properties>
+				<skipTests>true</skipTests>
+			</properties>
+		</profile>
+	</profiles>
+
+</project>

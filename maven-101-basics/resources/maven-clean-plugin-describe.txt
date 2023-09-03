@@ -1,0 +1,162 @@
+[INFO] Scanning for projects...
+[INFO] 
+[INFO] -------------------< com.bwgjoseph:maven-101-basics >-------------------
+[INFO] Building maven-101-basics 0.0.1-SNAPSHOT
+[INFO]   from pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- help:3.2.0:describe (default-cli) @ maven-101-basics ---
+[INFO] org.apache.maven.plugins:maven-clean-plugin:3.2.0
+
+Name: Apache Maven Clean Plugin
+Description: The Maven Clean Plugin is a plugin that removes files generated
+  at build-time in a project's directory.
+Group Id: org.apache.maven.plugins
+Artifact Id: maven-clean-plugin
+Version: 3.2.0
+Goal Prefix: clean
+
+This plugin has 2 goals:
+
+clean:clean
+  Description: Goal which cleans the build.
+    This attempts to clean a project's working directory of the files that were
+    generated at build-time. By default, it discovers and deletes the
+    directories configured in project.build.directory,
+    project.build.outputDirectory, project.build.testOutputDirectory, and
+    project.reporting.outputDirectory.
+    
+    Files outside the default may also be included in the deletion by
+    configuring the filesets tag.
+  Implementation: org.apache.maven.plugins.clean.CleanMojo
+  Language: java
+
+  Available parameters:
+
+    excludeDefaultDirectories (Default: false)
+      User property: maven.clean.excludeDefaultDirectories
+      Disables the deletion of the default output directories configured for a
+      project. If set to true, only the files/directories selected via the
+      parameter filesets will be deleted.
+      Starting with 3.0.0 the property has been renamed from
+      clean.excludeDefaultDirectories to maven.clean.excludeDefaultDirectories.
+
+    failOnError (Default: true)
+      User property: maven.clean.failOnError
+      Indicates whether the build will continue even if there are clean errors.
+
+    fast (Default: false)
+      User property: maven.clean.fast
+      Enables fast clean if possible. If set to true, when the plugin is
+      executed, a directory to be deleted will be atomically moved inside the
+      maven.clean.fastDir directory and a thread will be launched to delete the
+      needed files in the background. When the build is completed, maven will
+      wait until all the files have been deleted. If any problem occurs during
+      the atomic move of the directories, the plugin will default to the
+      traditional deletion mechanism.
+
+    fastDir
+      User property: maven.clean.fastDir
+      When fast clean is specified, the fastDir property will be used as the
+      location where directories to be deleted will be moved prior to
+      background deletion. If not specified, the
+      ${maven.multiModuleProjectDirectory}/target/.clean directory will be
+      used. If the ${build.directory} has been modified, you'll have to adjust
+      this property explicitly. In order for fast clean to work correctly, this
+      directory and the various directories that will be deleted should usually
+      reside on the same volume. The exact conditions are system dependant
+      though, but if an atomic move is not supported, the standard deletion
+      mechanism will be used.
+
+    fastMode (Default: background)
+      User property: maven.clean.fastMode
+      Mode to use when using fast clean. Values are: background to start
+      deletion immediately and waiting for all files to be deleted when the
+      session ends, at-end to indicate that the actual deletion should be
+      performed synchronously when the session ends, or defer to specify that
+      the actual file deletion should be started in the background when the
+      session ends (this should only be used when maven is embedded in a long
+      running process).
+
+    filesets
+      The list of file sets to delete, in addition to the default directories.
+      For example:
+      <filesets>
+       <fileset>
+       <directory>src/main/generated</directory>
+       <followSymlinks>false</followSymlinks>
+       <useDefaultExcludes>true</useDefaultExcludes>
+       <includes>
+       <include>*.java</include>
+       </includes>
+       <excludes>
+       <exclude>Template*</exclude>
+       </excludes>
+       </fileset>
+      </filesets>
+
+    followSymLinks (Default: false)
+      User property: maven.clean.followSymLinks
+      Sets whether the plugin should follow symbolic links while deleting files
+      from the default output directories of the project. Not following
+      symlinks requires more IO operations and heap memory, regardless whether
+      symlinks are actually present. So projects with a huge output directory
+      that knowingly does not contain symlinks can improve performance by
+      setting this parameter to true.
+      Starting with 3.0.0 the property has been renamed from
+      clean.followSymLinks to maven.clean.followSymLinks.
+
+    retryOnError (Default: true)
+      User property: maven.clean.retryOnError
+      Indicates whether the plugin should undertake additional attempts (after
+      a short delay) to delete a file if the first attempt failed. This is
+      meant to help deleting files that are temporarily locked by third-party
+      tools like virus scanners or search indexing.
+
+    skip (Default: false)
+      User property: maven.clean.skip
+      Disables the plugin execution.
+      Starting with 3.0.0 the property has been renamed from clean.skip to
+      maven.clean.skip.
+
+    verbose
+      User property: maven.clean.verbose
+      Sets whether the plugin runs in verbose mode. As of plugin version 2.3,
+      the default value is derived from Maven's global debug flag (compare
+      command line switch -X).
+      Starting with 3.0.0 the property has been renamed from clean.verbose to
+      maven.clean.verbose.
+
+clean:help
+  Description: Display help information on maven-clean-plugin.
+    Call mvn clean:help -Ddetail=true -Dgoal=<goal-name> to display parameter
+    details.
+  Implementation: org.apache.maven.plugins.clean.HelpMojo
+  Language: java
+
+  Available parameters:
+
+    detail (Default: false)
+      User property: detail
+      If true, display all settable properties for each goal.
+
+    goal
+      User property: goal
+      The name of the goal for which to show help. If unspecified, all goals
+      will be displayed.
+
+    indentSize (Default: 2)
+      User property: indentSize
+      The number of spaces per indentation level, should be positive.
+
+    lineLength (Default: 80)
+      User property: lineLength
+      The maximum length of a display line, should be positive.
+
+
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD SUCCESS
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time:  3.111 s
+[INFO] Finished at: 2023-09-03T21:09:39+08:00
+[INFO] ------------------------------------------------------------------------
