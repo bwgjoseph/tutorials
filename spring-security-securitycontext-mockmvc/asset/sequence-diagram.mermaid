@@ -1,0 +1,23 @@
+sequenceDiagram
+    participant TestThread as Test Thread
+    participant SecurityContextHolder as SecurityContextHolder
+    participant MockMvc as MockMvc.perform()
+    participant SpringSecurityFilter as Spring Security Filter
+
+    Note over TestThread: Test setup<br/>SecurityContextHolder.getContext().setAuthentication(...)
+    TestThread->>SecurityContextHolder: Set Authentication (User)
+    Note over SecurityContextHolder: SecurityContext populated
+
+    TestThread->>MockMvc: Perform request (mockMvc.perform(...))
+    MockMvc->>SpringSecurityFilter: Apply security filter chain
+    SpringSecurityFilter->>SecurityContextHolder: Use SecurityContext for request
+
+    Note over SpringSecurityFilter: Request processing<br/>SecurityContext accessible
+
+    SpringSecurityFilter->>SecurityContextHolder: clearContext() (on request completion)
+    Note over SecurityContextHolder: SecurityContext is now cleared
+
+    TestThread->>SecurityContextHolder: Try to access SecurityContext (after request)
+    SecurityContextHolder-->>TestThread: Returns null/empty context
+
+    Note over TestThread: SecurityContext unexpectedly cleared!

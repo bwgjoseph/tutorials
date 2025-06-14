@@ -1,0 +1,1 @@
+CREATE TABLE "USER" (ID long not null AUTO_INCREMENT, NAME varchar(255), PRIMARY KEY ( ID ));
