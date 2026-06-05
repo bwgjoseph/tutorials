@@ -1,0 +1,19 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mmm-core
+  labels:
+    env: prod
+spec:
+  replicas: 3
+  template:
+    metadata:
+      labels:
+        env: prod
+    spec:
+      containers:
+      - name: mmm-core
+        resources:
+          requests:
+            cpu: 500m
+            memory: 512Mi

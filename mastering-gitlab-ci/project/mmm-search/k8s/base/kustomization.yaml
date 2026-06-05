@@ -1,0 +1,7 @@
+resources:
+  - deployment.yaml
+  - service.yaml
+
+images:
+  - name: mmm-search
+    newName: registry.gitlab.com/bwgjoseph/maven-multi-module/mmm-search

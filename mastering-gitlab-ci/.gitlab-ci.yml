@@ -1,0 +1,243 @@
+# .gitlab-ci.yml (Root Orchestrator)
+variables:
+  CI_FULL_PIPELINE:
+    value: "false"
+    description: "Manual override to force all jobs to run, bypassing change detection."
+    options:
+      - "true"
+      - "false"
+  SAST_EXCLUDED_PATHS: "target, .mvn, .sonar"
+
+include:
+  - local: '.gitlab-ci-base.yml'
+    inputs:
+      full_pipeline: $CI_FULL_PIPELINE
+  - template: Jobs/SAST.gitlab-ci.yml
+  - template: Jobs/Secret-Detection.gitlab-ci.yml
+  - template: Security/Dependency-Scanning.gitlab-ci.yml
+
+# Universal High-Performance Workflow
+workflow:
+  rules:
+    - if: $CI_FULL_PIPELINE == "true"                  # Manual override
+    - if: $CI_PIPELINE_SOURCE == "parent_pipeline"
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS # Double-pipeline suppression
+      when: never
+    - if: $CI_COMMIT_BRANCH                             # All branch pushes (including main)
+
+stages:
+  - pre
+  - configuration
+  - foundation
+  - application
+  - test # setup to run Gitlab built-in scans
+  - report
+
+# Define a job in the special .pre stage to run first
+pre:
+  stage: .pre
+  script:
+    - env  # Recommended for Linux/Unix runners
+
+# Tier 0: Configuration (Parent POM)
+deploy-parent-pom:
+  stage: configuration
+  extends: 
+    - .base-maven-job
+    - .trigger-rules
+  variables:
+    MODULE_PATH: "parent-pom"
+  script:
+    - |
+      echo "Deploying Parent POM to GitLab Maven Registry..."
+      mvn $MAVEN_CLI_OPTS deploy -f parent-pom/pom.xml
+
+# Tier 1: Foundation (Security)
+trigger-security:
+  stage: foundation
+  extends: .trigger-rules
+  needs:
+    - job: deploy-parent-pom
+      optional: true
+  variables:
+    MODULE_PATH: "project/mmm-security"
+    PARENT_SOURCE: $CI_PIPELINE_SOURCE
+    PARENT_BRANCH: $CI_COMMIT_BRANCH
+  trigger:
+    include: project/mmm-security/.gitlab-ci.yml
+    strategy: mirror
+
+# Tier 2: Application (Core)
+trigger-core:
+  stage: application
+  extends: .trigger-rules
+  needs:
+    - job: trigger-security
+      optional: true
+    - job: deploy-parent-pom
+      optional: true
+  variables:
+    MODULE_PATH: "project/mmm-core"
+    PARENT_SOURCE: $CI_PIPELINE_SOURCE
+    PARENT_BRANCH: $CI_COMMIT_BRANCH
+  trigger:
+    include: project/mmm-core/.gitlab-ci.yml
+    strategy: mirror
+
+# Tier 2: Application (Search)
+trigger-search:
+  stage: application
+  extends: .trigger-rules
+  needs:
+    - job: trigger-security
+      optional: true
+    - job: deploy-parent-pom
+      optional: true
+  variables:
+    MODULE_PATH: "project/mmm-search"
+    PARENT_SOURCE: $CI_PIPELINE_SOURCE
+    PARENT_BRANCH: $CI_COMMIT_BRANCH
+  trigger:
+    include: project/mmm-search/.gitlab-ci.yml
+    strategy: mirror
+
+.report-parser:
+  script:
+    - |
+      echo "Collecting JaCoCo execution data using ID-based lookup..."
+      
+      # Map module name to its build job name (e.g., mmm-core -> build-core)
+      # Trigger jobs: trigger-core, trigger-search, trigger-security
+      
+      for module in mmm-core mmm-search mmm-security; do
+        TRIGGER_JOB_NAME="trigger-${module#mmm-}"
+        BUILD_JOB_NAME="build-${module#mmm-}"
+      
+        echo "Processing $module (Trigger: $TRIGGER_JOB_NAME, Build: $BUILD_JOB_NAME)..."
+      
+        # 1. Get the downstream child pipeline ID
+        CHILD_PIPELINE_ID=$(curl --silent --header "JOB-TOKEN: ${CI_JOB_TOKEN}" \
+          "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/pipelines/${CI_PIPELINE_ID}/bridges" \
+          | jq -r ".[] | select(.name==\"$TRIGGER_JOB_NAME\") | .downstream_pipeline.id")
+      
+        if [ -z "$CHILD_PIPELINE_ID" ] || [ "$CHILD_PIPELINE_ID" == "null" ]; then
+          echo "Error: Could not find downstream pipeline ID for $TRIGGER_JOB_NAME"
+          continue
+        fi
+      
+        echo "Found child pipeline ID: $CHILD_PIPELINE_ID"
+      
+        # 2. Extract the specific Job ID of the build job
+        CHILD_JOB_ID=$(curl --silent --header "JOB-TOKEN: ${CI_JOB_TOKEN}" \
+          "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/pipelines/${CHILD_PIPELINE_ID}/jobs" \
+          | jq -r ".[] | select(.name==\"$BUILD_JOB_NAME\") | .id")
+      
+        if [ -z "$CHILD_JOB_ID" ] || [ "$CHILD_JOB_ID" == "null" ]; then
+          echo "Error: Could not find job ID for $BUILD_JOB_NAME"
+          continue
+        fi
+      
+        echo "Found child job ID: $CHILD_JOB_ID"
+      
+        # 3. Download and unpack the artifacts
+        curl --fail --location --header "PRIVATE-TOKEN: ${ARTIFACT_COLLECTOR_TOKEN}" \
+          "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/jobs/${CHILD_JOB_ID}/artifacts" \
+          --output "${module}-artifacts.zip"
+      
+        if [ -f "${module}-artifacts.zip" ]; then
+          echo "Extracting data for $module..."
+          unzip -o "${module}-artifacts.zip"
+          rm "${module}-artifacts.zip"
+        fi
+      done
+
+# Final Aggregation (Report)
+aggregate-report:
+  stage: report
+  extends: .base-maven-job
+  needs:
+    - job: trigger-core
+      optional: true
+    - job: trigger-search
+      optional: true
+    - job: trigger-security
+      optional: true
+  variables:
+    MODULE_PATH: "project/mmm-report"
+    JACOCO_XML_PATH: "project/mmm-report/target/site/jacoco-aggregate/jacoco.xml"
+  cache:
+    key: "maven-$CI_COMMIT_REF_SLUG"
+    paths:
+      - .m2/repository/
+    policy: pull
+  script:
+    - |
+      # Ensure tools are available
+      apt-get update -qy && apt-get install -y jq unzip -qy
+    - !reference [.report-parser, script]
+    - |
+      echo "Aggregating JaCoCo coverage and staging Maven site..."
+      mvn $MAVEN_CLI_OPTS jacoco:report-aggregate -pl $MODULE_PATH -am
+      mvn $MAVEN_CLI_OPTS site site:stage -pl $MODULE_PATH -am
+    - !reference [.coverage-parser, script]
+  artifacts:
+    paths:
+      - "$MODULE_PATH/target/site/jacoco-aggregate"
+      - "target/staging"
+    reports:
+      coverage_report:
+        coverage_format: jacoco
+        path: "$MODULE_PATH/target/site/jacoco-aggregate/jacoco.xml"
+    expire_in: 1 week
+  coverage: '/Coverage: (\d+(?:\.\d+)?)%/'
+  rules:
+    - if: $CI_FULL_PIPELINE == "true"
+      when: always
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
+        - project/mmm-core/**/*
+        - project/mmm-search/**/*
+        - project/mmm-security/**/*
+        - parent-pom/**/*
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $CI_COMMIT_BEFORE_SHA != "0000000000000000000000000000000000000000"
+      changes:
+        - project/mmm-core/**/*
+        - project/mmm-search/**/*
+        - project/mmm-security/**/*
+        - parent-pom/**/*
+
+pages:
+  stage: report
+  needs:
+    - job: "aggregate-report"
+      optional: true
+  script:
+    - mkdir -p public/coverage public/site
+
+    # 1. Move JaCoCo reports to coverage/
+    - if [ -d "project/mmm-report/target/site/jacoco-aggregate" ]; then mv project/mmm-report/target/site/jacoco-aggregate/* public/coverage/; fi
+
+    # 2. Move Maven Site reports to site/
+    - |
+      if [ -d "target/staging" ]; then
+        mv target/staging/* public/site/
+      fi
+
+    # 3. Ensure a gateway index exists for the Maven Site
+    - |
+      if [ ! -f "public/site/index.html" ]; then
+        echo "Generating gateway index for Maven Site..."
+        links=$(ls -1 public/site/ | sed 's/^/<li><a href="/;s/$/\/index.html">\/<\/a><\/li>/')
+        printf "<html><head><title>Maven Site Modules</title></head><body><h1>Maven Site Modules</h1><ul>%s</ul></body></html>" "$links" > public/site/index.html
+      fi
+
+    # 4. Create the main Engineering Portal Gateway (Root)
+    - |
+      printf "<html><head><title>Engineering Portal</title></head><body><h1>MMM Project Engineering Portal</h1><ul><li><a href=\"coverage/index.html\">JaCoCo Aggregate Coverage Report</a></li><li><a href=\"site/index.html\">Full Maven Site Documentation</a></li></ul></body></html>" > public/index.html
+  artifacts:
+    paths:
+      - public
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+

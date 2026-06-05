@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mmm-search
+  labels:
+    app: mmm-search
+    env: dev
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mmm-search
+  template:
+    metadata:
+      labels:
+        app: mmm-search
+        env: dev
+    spec:
+      containers:
+      - name: mmm-search
+        image: mmm-search
+        ports:
+        - containerPort: 8080
+        readinessProbe:
+          httpGet:
+            path: /actuator/health/readiness
+            port: 8080
+          initialDelaySeconds: 15
+          periodSeconds: 5
+        livenessProbe:
+          httpGet:
+            path: /actuator/health/liveness
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi

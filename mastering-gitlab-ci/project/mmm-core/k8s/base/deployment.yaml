@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mmm-core
+  labels:
+    app: mmm-core
+    env: dev # Standardized for observability
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mmm-core
+  template:
+    metadata:
+      labels:
+        app: mmm-core
+        env: dev # Standardized for observability
+    spec:
+      containers:
+      - name: mmm-core
+        image: mmm-core
+        ports:
+        - containerPort: 8080
+        readinessProbe:
+          httpGet:
+            path: /actuator/health/readiness
+            port: 8080
+          initialDelaySeconds: 15
+          periodSeconds: 5
+        livenessProbe:
+          httpGet:
+            path: /actuator/health/liveness
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi

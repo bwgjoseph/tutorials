@@ -1,0 +1,278 @@
+# .gitlab-ci-base.yml
+spec:
+  inputs:
+    full_pipeline:
+      default: "false"
+      description: "Manual override to force all jobs to run"
+---
+image: maven:3.9.14-eclipse-temurin-25
+
+stages:
+  - build
+  - verify
+  - liquibase
+  - release
+
+variables:
+  # Performance: Use a project-relative path for caching
+  MAVEN_REPO_LOCAL: ".m2/repository"
+  SONAR_USER_HOME: ".sonar"  # Defines the location of the analysis task cache
+
+  # JVM Tuning for CI (Merged with user preferences)
+  MAVEN_OPTS: >-
+    -Dhttps.protocols=TLSv1.2
+    -Dorg.slf4j.simpleLogger.showDateTime=true
+    -Djava.awt.headless=true
+    -Dfile.encoding=UTF-8
+    -Xmx2048m
+    -XX:+TieredCompilation
+    -XX:TieredStopAtLevel=1
+
+  # Maven CLI optimization (Merged with user preferences)
+  MAVEN_CLI_OPTS: >-
+    --batch-mode
+    --errors
+    --fail-at-end
+    --show-version
+    --no-transfer-progress
+    --threads 1C
+    -DinstallAtEnd=true
+    -DdeployAtEnd=true
+    -s .mvn/settings-ci.xml
+
+  GIT_DEPTH: "0"  # Tells git to fetch all the branches of the project, required by the analysis task
+
+  # GitLab FastZip and Compression
+  FF_USE_FASTZIP: "true"
+  ARTIFACT_COMPRESSION_LEVEL: "fast"
+  CACHE_COMPRESSION_LEVEL: "fast"
+
+cache:
+  # Use a shared branch-level cache to allow modules to share internal dependencies
+  key: "maven-$CI_COMMIT_REF_SLUG"
+  paths:
+    - .m2/repository/
+    - "**/.spotless-index"
+  policy: pull-push
+
+.base-maven-job:
+  interruptible: true
+  before_script:
+    - export ABS_MAVEN_REPO_LOCAL="$CI_PROJECT_DIR/$MAVEN_REPO_LOCAL"
+    - export ABS_SONAR_USER_HOME="$CI_PROJECT_DIR/$SONAR_USER_HOME"
+    - export MAVEN_OPTS="$MAVEN_OPTS -Dmaven.repo.local=$ABS_MAVEN_REPO_LOCAL"
+    - echo "CI_PROJECT_DIR is $CI_PROJECT_DIR"
+    - echo "ABS_MAVEN_REPO_LOCAL is $ABS_MAVEN_REPO_LOCAL"
+    - echo "ABS_SONAR_USER_HOME is $ABS_SONAR_USER_HOME"
+    - echo "MAVEN_CLI_OPTS is $MAVEN_CLI_OPTS"
+    - mvn $MAVEN_CLI_OPTS --version
+
+# Template for consistent trigger rules
+.trigger-rules:
+  rules:
+    - if: "$[[ inputs.full_pipeline ]] == 'true'"
+      when: always
+    # Merge Request: Accuracy check using compare_to
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
+        compare_to: $CI_MERGE_REQUEST_TARGET_BRANCH_NAME
+        paths:
+          - $MODULE_PATH/**/*
+          - parent-pom/**/*
+    # Main Branch: Standard change detection
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $CI_COMMIT_BEFORE_SHA != "0000000000000000000000000000000000000000"
+      changes:
+        - $MODULE_PATH/**/*
+        - parent-pom/**/*
+
+.coverage-parser:
+  script:
+    - |
+      echo "Extracting coverage percentage for GitLab UI..."
+      REPORT_PATH=${JACOCO_XML_PATH:-"$MODULE_PATH/target/site/jacoco/jacoco.xml"}
+      echo "DEBUG: Parsing JaCoCo report at: $REPORT_PATH"
+      
+      if [ -f "$REPORT_PATH" ]; then
+        # Use grep -o to extract ONLY the matching tag, then tail -1 to get the aggregate
+        # This works correctly even if the entire XML is on a single line.
+        LINE_COUNTER=$(grep -o '<counter type="LINE"[^>]*/>' "$REPORT_PATH" | tail -1 || true)
+
+        if [ -n "$LINE_COUNTER" ]; then
+          MISSED=$(echo "$LINE_COUNTER" | sed -n 's/.*missed="\([0-9]*\)".*/\1/p')
+          COVERED=$(echo "$LINE_COUNTER" | sed -n 's/.*covered="\([0-9]*\)".*/\1/p')
+          TOTAL=$((MISSED + COVERED))
+
+          echo "DEBUG: Found LINE counter: missed=$MISSED, covered=$COVERED, total=$TOTAL"
+
+          if [ "$TOTAL" -gt 0 ]; then
+            PERCENT=$(awk -v c="$COVERED" -v t="$TOTAL" 'BEGIN {printf "%.2f", (c / t) * 100}')
+            echo "Coverage: $PERCENT%"
+          else
+            echo "Coverage: 0.00%"
+          fi
+        else
+          echo "DEBUG: No LINE counter line found in $REPORT_PATH"
+        fi
+      fi
+
+# Template for dependency modules
+.dependency-template:
+  extends: .base-maven-job
+  stage: build
+  variables:
+    JACOCO_XML_PATH: "$MODULE_PATH/target/site/jacoco/jacoco.xml"
+  script:
+    - mvn $MAVEN_CLI_OPTS verify -pl $MODULE_PATH -am
+    - !reference [.coverage-parser, script]
+  rules:
+    - if: $PARENT_SOURCE == "merge_request_event"
+    - if: $PARENT_BRANCH == "main"
+    # Fallback for standard feature branches if needed
+    - if: $PARENT_SOURCE == "push" 
+  artifacts:
+    when: always # Upload even on failure to allow debugging via HTML reports
+    paths:
+      - "$MODULE_PATH/target/"
+    reports:
+      junit: "$MODULE_PATH/target/surefire-reports/TEST-*.xml"
+      coverage_report:
+        coverage_format: jacoco
+        path: "$MODULE_PATH/target/site/jacoco/jacoco.xml"
+    expire_in: 1 hour
+  coverage: '/Coverage: (\d+(?:\.\d+)?)%/'
+
+# Template for application modules
+.application-template:
+  extends: .base-maven-job
+  stage: build
+  variables:
+    JACOCO_XML_PATH: "$MODULE_PATH/target/site/jacoco/jacoco.xml"
+  script:
+    - mvn $MAVEN_CLI_OPTS verify -pl $MODULE_PATH -am
+    - !reference [.coverage-parser, script]
+  rules:
+    - if: $PARENT_SOURCE == "merge_request_event"
+    - if: $PARENT_BRANCH == "main"
+    # Fallback for standard feature branches if needed
+    - if: $PARENT_SOURCE == "push" 
+  artifacts:
+    when: always # Upload even on failure to allow debugging via HTML reports
+    paths:
+      - "$MODULE_PATH/target/"
+    exclude:
+      - "$MODULE_PATH/target/*.jar"
+    reports:
+      junit:
+        - "$MODULE_PATH/target/surefire-reports/TEST-*.xml"
+        - "$MODULE_PATH/target/failsafe-reports/TEST-*.xml"
+      coverage_report:
+        coverage_format: jacoco
+        path: "$MODULE_PATH/target/site/jacoco/jacoco.xml"
+    expire_in: 1 hour
+  coverage: '/Coverage: (\d+(?:\.\d+)?)%/'
+
+.sonar-template:
+  extends: .base-maven-job
+  stage: verify
+  cache:
+    - key: "maven-$CI_COMMIT_REF_SLUG"
+      paths:
+        - .m2/repository/
+        - "**/.spotless-index"
+      policy: pull
+    - key: "sonar-cache-$MODULE_PATH"
+      paths:
+        - .sonar/cache
+      policy: pull-push
+  script:
+    - mvn $MAVEN_CLI_OPTS sonar:sonar -f $MODULE_PATH/pom.xml -X
+  rules:
+    - if: $PARENT_SOURCE == "merge_request_event"
+    - if: $PARENT_BRANCH == "main"
+    # Fallback for standard feature branches if needed
+    - if: $PARENT_SOURCE == "push" 
+
+# Liquibase templates
+.liquibase-template:
+  extends: .base-maven-job
+  rules:
+    - if: $PARENT_SOURCE == "merge_request_event"
+      changes:
+        - $MODULE_PATH/src/main/resources/db/changelog/**/*
+    - if: $PARENT_BRANCH == "main"
+      changes:
+        - $MODULE_PATH/src/main/resources/db/changelog/**/*
+
+.liquibase-validate:
+  extends: .liquibase-template
+  stage: liquibase
+  script:
+    # mvn $MAVEN_CLI_OPTS liquibase:validate -pl $MODULE_PATH
+    - echo "running mvn $MAVEN_CLI_OPTS liquibase:validate -pl $MODULE_PATH"
+
+.liquibase-update:
+  extends: .liquibase-template
+  stage: liquibase
+  needs: ["liquibase-validate"]
+  script:
+    # mvn $MAVEN_CLI_OPTS liquibase:update -pl $MODULE_PATH
+    - echo "running mvn $MAVEN_CLI_OPTS liquibase:update -pl $MODULE_PATH"
+  rules:
+    - if: $PARENT_BRANCH == "main"
+      changes:
+        - $MODULE_PATH/src/main/resources/db/changelog/**/*
+
+# Template for container image deployment
+.deploy-image-template:
+  extends: .base-maven-job
+  stage: release
+  cache:
+    key: "maven-$CI_COMMIT_REF_SLUG"
+    paths:
+      - .m2/repository/
+    policy: pull
+  script:
+    - |
+      echo "Building and pushing container image for $MODULE_PATH..."
+      # Use jib:build to push directly to registry
+      # We skip tests and use -pl -am to ensure dependencies are resolved
+      # Jib will use the classes already in target/ artifacts
+      mvn $MAVEN_CLI_OPTS jib:build -pl $MODULE_PATH -am -DskipTests
+  rules:
+    - if: $PARENT_SOURCE == "merge_request_event"
+    - if: $PARENT_BRANCH == "main"
+    # Fallback for standard feature branches if needed
+    - if: $PARENT_SOURCE == "push" 
+
+# Template for kubectl-based deployment using GitLab Agent (Transitional 'Push-Bridge' pattern)
+.deploy-cluster-template:
+  extends: .base-maven-job
+  stage: release
+  interruptible: false
+  image: registry.gitlab.com/your-org/ci-tools/kustomize-git:5.8.1
+  script:
+    - CONTEXT_ARG=${K8S_CONTEXT:+--context=$K8S_CONTEXT}
+    - kubectl $CONTEXT_ARG apply -k $OVERLAY_PATH
+    # Quality Gate: Ensure the deployment actually succeeds and pods become healthy
+    - kubectl $CONTEXT_ARG rollout status deployment/$DEPLOYMENT_NAME -n $K8S_NAMESPACE --timeout=300s
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  allow_failure: true
+
+# Template for snapshot deployment
+.deploy-snapshot-template:
+  extends: .base-maven-job
+  stage: release
+  interruptible: false # Ensure deployment finishes once started
+  cache:
+    key: "maven-$CI_COMMIT_REF_SLUG"
+    paths:
+      - .m2/repository/
+    policy: pull
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  script:
+    - |
+      echo "Deploying SNAPSHOT for $MODULE_PATH to GitLab Maven Registry..."
+      mvn $MAVEN_CLI_OPTS deploy -pl $MODULE_PATH -am -DskipTests
+  allow_failure: false

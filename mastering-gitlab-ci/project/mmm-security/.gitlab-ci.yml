@@ -1,0 +1,17 @@
+# project/mmm-security/.gitlab-ci.yml
+include:
+  - local: '.gitlab-ci-base.yml'
+
+variables:
+  MODULE_PATH: "project/mmm-security"
+
+build-security:
+  extends: .dependency-template
+
+sonar-security:
+  extends: .sonar-template
+  needs: ["build-security"]
+
+deploy-security-snapshot:
+  extends: .deploy-snapshot-template
+  needs: ["build-security"]

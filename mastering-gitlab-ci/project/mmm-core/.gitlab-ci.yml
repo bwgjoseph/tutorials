@@ -1,0 +1,51 @@
+# project/mmm-core/.gitlab-ci.yml
+include:
+  - local: '.gitlab-ci-base.yml'
+
+variables:
+  MODULE_PATH: "project/mmm-core"
+
+build-core:
+  extends: .application-template
+
+sonar-core:
+  extends: .sonar-template
+  needs: ["build-core"]
+
+deploy-core-snapshot:
+  extends: .deploy-snapshot-template
+  needs: ["build-core"]
+
+deploy-core-image:
+  extends: .deploy-image-template
+  needs: ["build-core"]
+
+deploy-manifests-dev:
+  extends: .deploy-cluster-template
+  needs: ["deploy-core-image"]
+  resource_group: core-deploy-dev
+  environment:
+    name: dev
+  variables:
+    OVERLAY_PATH: "project/mmm-core/k8s/overlays/dev"
+    DEPLOYMENT_NAME: "mmm-core"
+
+deploy-manifests-stage:
+  extends: .deploy-cluster-template
+  needs: ["deploy-core-image"]
+  resource_group: core-deploy-stage
+  environment:
+    name: staging
+  variables:
+    OVERLAY_PATH: "project/mmm-core/k8s/overlays/stage"
+    DEPLOYMENT_NAME: "mmm-core"
+
+deploy-manifests-prod:
+  extends: .deploy-cluster-template
+  needs: ["deploy-core-image"]
+  resource_group: core-deploy-prod
+  environment:
+    name: production
+  variables:
+    OVERLAY_PATH: "project/mmm-core/k8s/overlays/prod"
+    DEPLOYMENT_NAME: "mmm-core"

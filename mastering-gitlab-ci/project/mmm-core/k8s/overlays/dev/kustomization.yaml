@@ -1,0 +1,6 @@
+resources:
+  - ../../base
+
+images:
+  - name: mmm-core
+    newTag: dev-latest

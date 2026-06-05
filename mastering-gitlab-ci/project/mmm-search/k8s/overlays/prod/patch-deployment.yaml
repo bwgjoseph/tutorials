@@ -1,0 +1,21 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mmm-search
+  labels:
+    app: mmm-search
+    env: prod
+spec:
+  replicas: 3
+  template:
+    metadata:
+      labels:
+        app: mmm-search
+        env: prod
+    spec:
+      containers:
+      - name: mmm-search
+        resources:
+          requests:
+            cpu: 500m
+            memory: 512Mi

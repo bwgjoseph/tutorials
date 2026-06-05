@@ -1,0 +1,59 @@
+# project/mmm-search/.gitlab-ci.yml
+include:
+  - local: '.gitlab-ci-base.yml'
+
+variables:
+  MODULE_PATH: "project/mmm-search"
+
+build-search:
+  extends: .application-template
+
+sonar-search:
+  extends: .sonar-template
+  needs: ["build-search"]
+
+deploy-search-snapshot:
+  extends: .deploy-snapshot-template
+  needs: ["build-search"]
+
+deploy-search-image:
+  extends: .deploy-image-template
+  needs: ["build-search"]
+
+deploy-manifests-dev:
+  extends: .deploy-cluster-template
+  needs: ["deploy-search-image"]
+  resource_group: search-deploy-dev
+  environment:
+    name: dev
+  variables:
+    OVERLAY_PATH: "project/mmm-search/k8s/overlays/dev"
+    DEPLOYMENT_NAME: "mmm-search"
+
+deploy-manifests-stage:
+  extends: .deploy-cluster-template
+  needs: ["deploy-search-image"]
+  resource_group: search-deploy-stage
+  environment:
+    name: staging
+  variables:
+    OVERLAY_PATH: "project/mmm-search/k8s/overlays/stage"
+    DEPLOYMENT_NAME: "mmm-search"
+
+deploy-manifests-prod:
+  extends: .deploy-cluster-template
+  needs: ["deploy-search-image"]
+  resource_group: search-deploy-prod
+  environment:
+    name: production
+  variables:
+    OVERLAY_PATH: "project/mmm-search/k8s/overlays/prod"
+    DEPLOYMENT_NAME: "mmm-search"
+
+liquibase-validate:
+  extends: .liquibase-validate
+  needs: ["build-search"]
+
+liquibase-update:
+  extends: .liquibase-update
+  needs: ["liquibase-validate"]

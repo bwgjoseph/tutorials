@@ -1,0 +1,7 @@
+resources:
+  - deployment.yaml
+  - service.yaml
+
+images:
+  - name: mmm-core
+    newName: registry.gitlab.com/bwgjoseph/maven-multi-module/mmm-core
