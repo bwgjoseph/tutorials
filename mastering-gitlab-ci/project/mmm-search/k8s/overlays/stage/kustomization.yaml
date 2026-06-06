@@ -1,9 +1,0 @@
-resources:
-  - ../../base
-
-patches:
-  - path: patch-deployment.yaml
-
-images:
-  - name: mmm-search
-    newTag: 0.0.1-stage

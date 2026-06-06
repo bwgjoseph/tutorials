@@ -20,26 +20,6 @@ deploy-search-image:
   extends: .deploy-image-template
   needs: ["build-search"]
 
-deploy-manifests-dev:
-  extends: .deploy-cluster-template
-  needs: ["deploy-search-image"]
-  resource_group: search-deploy-dev
-  environment:
-    name: dev
-  variables:
-    OVERLAY_PATH: "project/mmm-search/k8s/overlays/dev"
-    DEPLOYMENT_NAME: "mmm-search"
-
-deploy-manifests-stage:
-  extends: .deploy-cluster-template
-  needs: ["deploy-search-image"]
-  resource_group: search-deploy-stage
-  environment:
-    name: staging
-  variables:
-    OVERLAY_PATH: "project/mmm-search/k8s/overlays/stage"
-    DEPLOYMENT_NAME: "mmm-search"
-
 deploy-manifests-prod:
   extends: .deploy-cluster-template
   needs: ["deploy-search-image"]
@@ -49,6 +29,14 @@ deploy-manifests-prod:
   variables:
     OVERLAY_PATH: "project/mmm-search/k8s/overlays/prod"
     DEPLOYMENT_NAME: "mmm-search"
+
+rollback-prod:
+  extends: .rollback-template
+  needs: ["deploy-manifests-prod"]
+  resource_group: search-deploy-prod
+  variables:
+    DEPLOYMENT_NAME: "mmm-search"
+    K8S_NAMESPACE: "production"
 
 liquibase-validate:
   extends: .liquibase-validate

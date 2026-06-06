@@ -259,6 +259,20 @@ cache:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
   allow_failure: true
 
+# Template for manual rollback using Kubernetes rollout undo
+.rollback-template:
+  extends: .base-maven-job
+  stage: release
+  interruptible: false
+  image: registry.gitlab.com/your-org/ci-tools/kustomize-git:5.8.1
+  script:
+    - CONTEXT_ARG=${K8S_CONTEXT:+--context=$K8S_CONTEXT}
+    - echo "Rolling back deployment $DEPLOYMENT_NAME in namespace $K8S_NAMESPACE..."
+    - kubectl $CONTEXT_ARG rollout undo deployment/$DEPLOYMENT_NAME -n $K8S_NAMESPACE
+    - kubectl $CONTEXT_ARG rollout status deployment/$DEPLOYMENT_NAME -n $K8S_NAMESPACE --timeout=300s
+  when: manual
+  allow_failure: true
+
 # Template for snapshot deployment
 .deploy-snapshot-template:
   extends: .base-maven-job

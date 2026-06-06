@@ -1,6 +1,0 @@
-resources:
-  - ../../base
-
-images:
-  - name: mmm-search
-    newTag: dev-latest
