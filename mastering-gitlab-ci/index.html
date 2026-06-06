@@ -1,0 +1,1347 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mastering GitLab Parent‑Child Pipelines: Interactive Playbook</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#f5f3ff',
+                            100: '#ede9fe',
+                            500: '#6366f1',
+                            600: '#4f46e5',
+                            700: '#4338ca',
+                            900: '#312e81',
+                        },
+                        gitlab: {
+                            orange: '#e24329',
+                            dark: '#1e1e24',
+                            light: '#2f2f35'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Prism.js for syntax highlighting -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" rel="stylesheet" />
+    <style>
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #18181b;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #3f3f46;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #52525b;
+        }
+        /* Custom Prism override for integration */
+        pre[class*="language-"] {
+            background: #18181b !important;
+            margin: 0 !important;
+            border-radius: 0.5rem;
+            border: 1px solid #27272a;
+        }
+        code[class*="language-"] {
+            font-family: 'Fira Code', 'Courier New', Courier, monospace !important;
+            font-size: 0.875rem !important;
+        }
+        /* Pulse animations for simulator */
+        @keyframes flowLine {
+            0% { stroke-dashoffset: 24; }
+            100% { stroke-dashoffset: 0; }
+        }
+        .flow-active {
+            stroke-dasharray: 8;
+            animation: flowLine 1s linear infinite;
+        }
+    </style>
+</head>
+<body class="bg-zinc-950 text-zinc-100 font-sans antialiased selection:bg-brand-600 selection:text-white min-h-screen flex flex-col">
+
+    <!-- Top Navigation Header -->
+    <header class="border-b border-zinc-800 bg-zinc-900/80 backdrop-blur sticky top-0 z-50 px-4 py-3 sm:px-6">
+        <div class="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div class="flex items-center space-x-3">
+                <div class="bg-gradient-to-tr from-orange-500 to-red-600 p-2.5 rounded-xl shadow-lg shadow-red-900/20">
+                    <!-- GitLab Logo SVG -->
+                    <svg class="w-6 h-6 text-white" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M23.955 13.587l-1.342-4.135-2.664-8.189c-.135-.415-.724-.415-.859 0l-2.664 8.19H7.574l-2.664-8.19c-.135-.415-.724-.415-.859 0L1.387 9.452.045 13.587c-.114.35.01.734.31.953l11.645 8.46 11.645-8.46c.3-.219.424-.603.31-.953z"/>
+                    </svg>
+                </div>
+                <div>
+                    <h1 class="font-bold text-lg leading-tight tracking-tight bg-gradient-to-r from-orange-400 via-indigo-200 to-indigo-400 bg-clip-text text-transparent">
+                        GitLab Parent-Child Pipelines
+                    </h1>
+                    <p class="text-xs text-zinc-400">Scalable CI/CD Playbook & Rollback Orchestrator</p>
+                </div>
+            </div>
+
+            <!-- Global Tabs -->
+            <nav class="flex space-x-1 bg-zinc-950 p-1 rounded-xl border border-zinc-800 w-full sm:w-auto overflow-x-auto">
+                <button onclick="switchTab('simulator')" id="btn-tab-simulator" class="tab-btn px-3 py-1.5 text-xs font-medium rounded-lg transition-all duration-200 flex items-center space-x-1.5 text-white bg-zinc-800 shadow">
+                    <i data-lucide="play" class="w-3.5 h-3.5"></i>
+                    <span>Interactive Sim</span>
+                </button>
+                <button onclick="switchTab('playbook')" id="btn-tab-playbook" class="tab-btn px-3 py-1.5 text-xs font-medium rounded-lg transition-all duration-200 flex items-center space-x-1.5 text-zinc-400 hover:text-white">
+                    <i data-lucide="book-open" class="w-3.5 h-3.5"></i>
+                    <span>The Playbook</span>
+                </button>
+                <button onclick="switchTab('generator')" id="btn-tab-generator" class="tab-btn px-3 py-1.5 text-xs font-medium rounded-lg transition-all duration-200 flex items-center space-x-1.5 text-zinc-400 hover:text-white">
+                    <i data-lucide="sliders" class="w-3.5 h-3.5"></i>
+                    <span>Config Builder</span>
+                </button>
+                <button onclick="switchTab('quiz')" id="btn-tab-quiz" class="tab-btn px-3 py-1.5 text-xs font-medium rounded-lg transition-all duration-200 flex items-center space-x-1.5 text-zinc-400 hover:text-white">
+                    <i data-lucide="award" class="w-3.5 h-3.5"></i>
+                    <span>Team Quiz</span>
+                </button>
+            </nav>
+        </div>
+    </header>
+
+    <!-- Main Content Workspace -->
+    <main class="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8">
+
+        <!-- Toast Notification Container -->
+        <div id="toast-container" class="fixed bottom-4 right-4 z-50 space-y-2 pointer-events-none"></div>
+
+        <!-- TAB 1: INTERACTIVE SIMULATOR -->
+        <section id="tab-content-simulator" class="space-y-6">
+            <div class="bg-gradient-to-r from-zinc-900 to-zinc-950 border border-zinc-800 rounded-2xl p-6 relative overflow-hidden">
+                <div class="absolute top-0 right-0 w-96 h-96 bg-brand-500/10 rounded-full blur-3xl -z-10 pointer-events-none"></div>
+                <div class="absolute bottom-0 left-0 w-96 h-96 bg-orange-500/5 rounded-full blur-3xl -z-10 pointer-events-none"></div>
+                
+                <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-6 mb-6 pb-6 border-b border-zinc-800">
+                    <div class="max-w-2xl">
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-500/10 text-orange-400 border border-orange-500/20 mb-3">
+                            Hands-on Lab
+                        </span>
+                        <h2 class="text-2xl font-bold tracking-tight">CI/CD & Deployment Rollback Lab</h2>
+                        <p class="text-zinc-400 text-sm mt-1">
+                            Click modules on the left to simulate changes, run core deployments with safe parallel locks, or hit the <strong>Emergency Rollback Panic Button</strong> to verify instant automated reversions.
+                        </p>
+                    </div>
+                    <div class="flex flex-wrap gap-2 items-center">
+                        <button onclick="triggerEmergencyRollback()" class="bg-gradient-to-r from-red-600 to-rose-700 hover:from-red-500 hover:to-rose-600 text-white text-xs font-bold px-4 py-2.5 rounded-xl shadow-lg shadow-red-950/40 transition-all duration-150 flex items-center space-x-2">
+                            <i data-lucide="shield-alert" class="w-4 h-4"></i>
+                            <span>Trigger Rollback (Panic Button)</span>
+                        </button>
+                        <button onclick="triggerFullPipeline()" class="bg-gradient-to-r from-indigo-600 to-brand-600 hover:from-indigo-500 hover:to-brand-500 text-white text-xs font-semibold px-4 py-2.5 rounded-xl shadow-lg shadow-indigo-900/30 transition-all duration-150 flex items-center space-x-2">
+                            <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+                            <span>Full Pipeline Override</span>
+                        </button>
+                        <button onclick="resetSimulator()" class="bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-semibold px-4 py-2.5 rounded-xl border border-zinc-700 transition-all duration-150">
+                            Reset State
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Monorepo Directory Selection Map & Interactive Visual Pipeline -->
+                <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                    
+                    <!-- Left Column: Simulated Directory Explorer -->
+                    <div class="lg:col-span-4 bg-zinc-950/80 border border-zinc-800 rounded-xl p-4 flex flex-col justify-between">
+                        <div>
+                            <h3 class="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-4 flex items-center justify-between">
+                                <span>Monorepo Directory Tree</span>
+                                <span class="text-[10px] text-zinc-500 font-normal">Click a module to edit</span>
+                            </h3>
+                            
+                            <div class="space-y-1 text-sm font-mono select-none">
+                                <div class="flex items-center space-x-2 text-zinc-500 p-1">
+                                    <i data-lucide="folder" class="w-4 h-4 text-amber-500"></i>
+                                    <span>. (Root Aggregator)</span>
+                                </div>
+                                
+                                <div class="pl-4 flex items-center justify-between p-1 hover:bg-zinc-900 rounded cursor-pointer group transition-colors" onclick="simulateChange('parent-pom')">
+                                    <div class="flex items-center space-x-2 text-zinc-300">
+                                        <i data-lucide="folder-git" class="w-4 h-4 text-indigo-400"></i>
+                                        <span class="font-semibold text-indigo-300">parent-pom/</span>
+                                    </div>
+                                    <span class="text-[10px] px-2 py-0.5 bg-zinc-800 text-zinc-400 rounded opacity-0 group-hover:opacity-100 transition-opacity">Edit Config</span>
+                                </div>
+                                <div class="pl-8 text-xs text-zinc-500 flex items-center space-x-2 border-l border-zinc-800 py-0.5">
+                                    <i data-lucide="file-code" class="w-3.5 h-3.5"></i>
+                                    <span>pom.xml</span>
+                                </div>
+
+                                <div class="pl-4 flex items-center space-x-2 text-zinc-400 py-1">
+                                    <i data-lucide="folder" class="w-4 h-4 text-amber-500"></i>
+                                    <span>project/</span>
+                                </div>
+
+                                <!-- Modules -->
+                                <div class="pl-8 flex items-center justify-between p-1 hover:bg-zinc-900 rounded cursor-pointer group transition-colors" onclick="simulateChange('mmm-security')">
+                                    <div class="flex items-center space-x-2 text-zinc-300">
+                                        <i data-lucide="folder" class="w-4 h-4 text-emerald-500"></i>
+                                        <span>mmm-security/</span>
+                                    </div>
+                                    <span class="text-emerald-500 text-[10px] font-semibold flex items-center space-x-1">
+                                        <span class="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-ping"></span>
+                                        <span>Foundation</span>
+                                    </span>
+                                </div>
+
+                                <div class="pl-8 flex items-center justify-between p-1 hover:bg-zinc-900 rounded cursor-pointer group transition-colors" onclick="simulateChange('mmm-core')">
+                                    <div class="flex items-center space-x-2 text-zinc-300">
+                                        <i data-lucide="folder" class="w-4 h-4 text-blue-500"></i>
+                                        <span>mmm-core/</span>
+                                    </div>
+                                    <span class="text-blue-500 text-[10px] font-semibold flex items-center space-x-1">
+                                        <span class="w-1.5 h-1.5 bg-blue-500 rounded-full animate-ping"></span>
+                                        <span>Core App</span>
+                                    </span>
+                                </div>
+
+                                <div class="pl-8 flex items-center justify-between p-1 hover:bg-zinc-900 rounded cursor-pointer group transition-colors" onclick="simulateChange('mmm-search')">
+                                    <div class="flex items-center space-x-2 text-zinc-300">
+                                        <i data-lucide="folder" class="w-4 h-4 text-purple-500"></i>
+                                        <span>mmm-search/</span>
+                                    </div>
+                                    <span class="text-purple-500 text-[10px] font-semibold flex items-center space-x-1">
+                                        <span class="w-1.5 h-1.5 bg-purple-500 rounded-full animate-ping"></span>
+                                        <span>Search App</span>
+                                    </span>
+                                </div>
+
+                                <div class="pl-8 flex items-center justify-between p-1 hover:bg-zinc-900 rounded cursor-pointer group transition-colors" onclick="simulateChange('mmm-report')">
+                                    <div class="flex items-center space-x-2 text-zinc-300">
+                                        <i data-lucide="folder" class="w-4 h-4 text-teal-500"></i>
+                                        <span>mmm-report/</span>
+                                    </div>
+                                    <span class="text-teal-400 text-[10px] font-semibold">Ghost Aggregator</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="mt-4 pt-4 border-t border-zinc-800 text-xs text-zinc-400 space-y-2">
+                            <p class="font-bold text-zinc-300">Selected branch context:</p>
+                            <div class="flex items-center justify-between bg-zinc-900 p-2 rounded-lg">
+                                <span class="flex items-center text-zinc-300">
+                                    <i data-lucide="git-branch" class="w-3.5 h-3.5 text-orange-500 mr-1.5"></i>
+                                    <span id="active-branch">main</span>
+                                </span>
+                                <button onclick="toggleBranch()" class="text-[10px] bg-zinc-800 hover:bg-zinc-700 text-white px-2 py-0.5 rounded border border-zinc-700 transition">
+                                    Toggle Branch
+                                </button>
+                            </div>
+                            <div id="simulated-change-badge" class="bg-indigo-950/40 border border-indigo-950 text-indigo-400 p-2.5 rounded-lg text-center font-mono text-[11px] flex flex-col items-center">
+                                <span class="font-bold">LAST EVENT DETECTED:</span>
+                                <span id="last-change-label" class="text-zinc-200 mt-1">None. Click a module above!</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Right Column: Live Pipeline Canvas Visualizer -->
+                    <div class="lg:col-span-8 bg-zinc-900/40 border border-zinc-800 rounded-xl p-4 flex flex-col justify-between relative">
+                        <div>
+                            <div class="flex items-center justify-between border-b border-zinc-800 pb-3 mb-4">
+                                <h3 class="text-xs font-bold text-zinc-300 uppercase tracking-wider flex items-center space-x-2">
+                                    <span class="w-2 h-2 rounded-full bg-orange-500 animate-pulse"></span>
+                                    <span>Orchestrator Stage Flow & Deployment Locks</span>
+                                </h3>
+                                <div class="flex items-center space-x-2 text-xs text-zinc-400">
+                                    <span>Pipeline Status:</span>
+                                    <span id="pipeline-status-badge" class="font-mono text-zinc-500 font-bold px-2 py-0.5 bg-zinc-950 rounded">IDLE</span>
+                                </div>
+                            </div>
+
+                            <!-- Animated Pipeline Node Path -->
+                            <div class="relative py-4 overflow-x-auto">
+                                <div class="min-w-[620px] flex items-center justify-between relative px-2">
+                                    
+                                    <!-- Connecting SVG Path -->
+                                    <svg class="absolute top-1/2 left-0 w-full h-2 -translate-y-1/2 -z-10" pointer-events="none">
+                                        <line x1="5%" y1="50%" x2="95%" y2="50%" stroke="#27272a" stroke-width="4" stroke-linecap="round"/>
+                                        <line id="flow-line" x1="5%" y1="50%" x2="95%" y2="50%" stroke="#6366f1" stroke-width="4" stroke-linecap="round" class="hidden"/>
+                                    </svg>
+
+                                    <!-- Node: Configuration -->
+                                    <div class="flex flex-col items-center">
+                                        <div id="node-config" class="w-12 h-12 rounded-xl bg-zinc-800 border-2 border-zinc-700 flex items-center justify-center transition-all duration-300 shadow">
+                                            <i data-lucide="settings" class="w-5 h-5 text-zinc-400"></i>
+                                        </div>
+                                        <span class="text-[10px] font-mono text-zinc-400 mt-2 font-semibold">Config</span>
+                                        <span class="text-[9px] text-zinc-600 font-mono">deploy-parent-pom</span>
+                                    </div>
+
+                                    <!-- Node: Foundation -->
+                                    <div class="flex flex-col items-center">
+                                        <div id="node-foundation" class="w-12 h-12 rounded-xl bg-zinc-800 border-2 border-zinc-700 flex items-center justify-center transition-all duration-300 shadow">
+                                            <i data-lucide="shield" class="w-5 h-5 text-zinc-400"></i>
+                                        </div>
+                                        <span class="text-[10px] font-mono text-zinc-400 mt-2 font-semibold">Foundation</span>
+                                        <span class="text-[9px] text-zinc-600 font-mono">mmm-security</span>
+                                    </div>
+
+                                    <!-- Node: Application -->
+                                    <div class="flex flex-col items-center">
+                                        <div id="node-app" class="w-12 h-12 rounded-xl bg-zinc-800 border-2 border-zinc-700 flex items-center justify-center transition-all duration-300 shadow">
+                                            <i data-lucide="cpu" class="w-5 h-5 text-zinc-400"></i>
+                                        </div>
+                                        <span class="text-[10px] font-mono text-zinc-400 mt-2 font-semibold">Build & Verify</span>
+                                        <span class="text-[9px] text-zinc-600 font-mono">mmm-core / search</span>
+                                    </div>
+
+                                    <!-- Node: Deployment Lock -->
+                                    <div class="flex flex-col items-center">
+                                        <div id="node-deploy" class="w-12 h-12 rounded-xl bg-zinc-800 border-2 border-zinc-700 flex items-center justify-center transition-all duration-300 shadow">
+                                            <i data-lucide="lock" class="w-5 h-5 text-zinc-400"></i>
+                                        </div>
+                                        <span class="text-[10px] font-mono text-zinc-400 mt-2 font-semibold">Deploy Prod</span>
+                                        <span class="text-[9px] text-zinc-600 font-mono">resource_group</span>
+                                    </div>
+
+                                    <!-- Node: Rollback -->
+                                    <div class="flex flex-col items-center">
+                                        <div id="node-rollback" class="w-12 h-12 rounded-xl bg-zinc-800 border-2 border-zinc-700 flex items-center justify-center transition-all duration-300 shadow">
+                                            <i data-lucide="history" class="w-5 h-5 text-zinc-400"></i>
+                                        </div>
+                                        <span class="text-[10px] font-mono text-zinc-400 mt-2 font-semibold">Rollback</span>
+                                        <span class="text-[9px] text-zinc-600 font-mono">Emergency Manual</span>
+                                    </div>
+
+                                </div>
+                            </div>
+
+                            <!-- Execution Logs Monitor -->
+                            <div class="mt-6">
+                                <h4 class="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-2 flex items-center justify-between">
+                                    <span>Interactive Monorepo Terminal Console</span>
+                                    <span class="flex h-2 w-2 relative">
+                                        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-400 opacity-75"></span>
+                                        <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                                    </span>
+                                </h4>
+                                <div id="terminal-log" class="bg-zinc-950 border border-zinc-800 rounded-lg p-3 font-mono text-[11px] text-zinc-400 h-44 overflow-y-auto space-y-1">
+                                    <div class="text-zinc-600">[info] Ready for pipeline execution simulation. Click elements to trigger actions.</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Highlights Section -->
+                        <div class="mt-4 pt-4 border-t border-zinc-800 grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                            <div class="bg-zinc-900/60 p-2.5 rounded-lg border border-zinc-800">
+                                <div class="text-zinc-300 font-semibold mb-1 flex items-center">
+                                    <i data-lucide="git-pull-request" class="w-3.5 h-3.5 text-orange-500 mr-1"></i>
+                                    <span>Double-Pipeline suppression</span>
+                                </div>
+                                <p class="text-zinc-500 leading-normal">Excludes redundant pipeline trigger sequences on branches with active open MRs.</p>
+                            </div>
+                            <div class="bg-zinc-900/60 p-2.5 rounded-lg border border-zinc-800">
+                                <div class="text-zinc-300 font-semibold mb-1 flex items-center">
+                                    <i data-lucide="key-round" class="w-3.5 h-3.5 text-emerald-500 mr-1"></i>
+                                    <span>Deploy locks</span>
+                                </div>
+                                <p class="text-zinc-500 leading-normal" id="metric-lock-status">Mutex lock "core-deploy-prod" prevents race conditions on deployments.</p>
+                            </div>
+                            <div class="bg-zinc-900/60 p-2.5 rounded-lg border border-zinc-800">
+                                <div class="text-zinc-300 font-semibold mb-1 flex items-center">
+                                    <i data-lucide="rotate-ccw" class="w-3.5 h-3.5 text-rose-500 mr-1"></i>
+                                    <span>kubectl rollout undo</span>
+                                </div>
+                                <p class="text-zinc-500 leading-normal">Emergency rollback job reverts target components instantly on failure events.</p>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </section>
+
+        <!-- TAB 2: THE PLAYBOOK -->
+        <section id="tab-content-playbook" class="hidden grid grid-cols-1 lg:grid-cols-12 gap-8">
+            
+            <!-- Left Side Navigation -->
+            <div class="lg:col-span-3 lg:sticky lg:top-24 space-y-4 h-fit">
+                <div class="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
+                    <h3 class="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-3">Jump to Section</h3>
+                    <ul class="space-y-1 text-sm">
+                        <li>
+                            <button onclick="scrollToSection('sec-background')" class="w-full text-left py-1.5 px-2.5 rounded text-zinc-300 hover:bg-zinc-800 font-medium transition-colors">1. Background & Pain Points</button>
+                        </li>
+                        <li>
+                            <button onclick="scrollToSection('sec-architecture')" class="w-full text-left py-1.5 px-2.5 rounded text-zinc-300 hover:bg-zinc-800 font-medium transition-colors">2. Multi-Module Layout</button>
+                        </li>
+                        <li>
+                            <button onclick="scrollToSection('sec-orchestrator')" class="w-full text-left py-1.5 px-2.5 rounded text-zinc-300 hover:bg-zinc-800 font-medium transition-colors">3. Root Orchestrator</button>
+                        </li>
+                        <li>
+                            <button onclick="scrollToSection('sec-blueprint')" class="w-full text-left py-1.5 px-2.5 rounded text-zinc-300 hover:bg-zinc-800 font-medium transition-colors">4. Central Blueprint</button>
+                        </li>
+                        <li>
+                            <button onclick="scrollToSection('sec-rollbacks')" class="w-full text-left py-1.5 px-2.5 rounded text-zinc-300 hover:bg-zinc-800 font-medium transition-colors">5. Lock Safety & Rollbacks</button>
+                        </li>
+                        <li>
+                            <button onclick="scrollToSection('sec-sast')" class="w-full text-left py-1.5 px-2.5 rounded text-zinc-300 hover:bg-zinc-800 font-medium transition-colors">6. Shift-Left Security</button>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Right Side: Content Area -->
+            <div class="lg:col-span-9 space-y-12">
+                
+                <!-- Background & Objectives -->
+                <article id="sec-background" class="bg-zinc-900/40 border border-zinc-800 rounded-2xl p-6 sm:p-8 space-y-4">
+                    <div class="flex items-center space-x-2 text-indigo-400">
+                        <i data-lucide="flag" class="w-5 h-5"></i>
+                        <span class="text-xs uppercase tracking-wider font-bold">Introduction</span>
+                    </div>
+                    <h2 class="text-2xl font-bold">Background & Strategic Objectives</h2>
+                    <p class="text-zinc-400 text-sm leading-relaxed">
+                        To resolve persistent pain points including double pipeline runs on Merge Requests, fragile artifact retention, and spotty JaCoCo test visibility, we designed a comprehensive monorepo restructuring. By containerizing independent steps into self-contained sub-stages, we reduced build noise while reinforcing pipeline speed and scale.
+                    </p>
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2">
+                        <div class="bg-zinc-950 p-4 rounded-xl border border-zinc-800">
+                            <span class="text-orange-400 font-bold text-sm block mb-1">Double Pipelines Fixed</span>
+                            <p class="text-xs text-zinc-500">Prevented both branch and MR pipelines from triggering for identical commits.</p>
+                        </div>
+                        <div class="bg-zinc-950 p-4 rounded-xl border border-zinc-800">
+                            <span class="text-indigo-400 font-bold text-sm block mb-1">Centralized Blueprint</span>
+                            <p class="text-xs text-zinc-500">Leveraged spec:inputs and modular reference configs to cleanly reuse configurations.</p>
+                        </div>
+                        <div class="bg-zinc-950 p-4 rounded-xl border border-zinc-800">
+                            <span class="text-emerald-400 font-bold text-sm block mb-1">Optimal Performance</span>
+                            <p class="text-xs text-zinc-500">Leveraged FastZip & tiered JVM optimization flags to decrease runtimes.</p>
+                        </div>
+                    </div>
+                </article>
+
+                <!-- Project Layout -->
+                <article id="sec-architecture" class="bg-zinc-900/40 border border-zinc-800 rounded-2xl p-6 sm:p-8 space-y-4">
+                    <div class="flex items-center space-x-2 text-indigo-400">
+                        <i data-lucide="folder-tree" class="w-5 h-5"></i>
+                        <span class="text-xs uppercase tracking-wider font-bold">Structure</span>
+                    </div>
+                    <h2 class="text-2xl font-bold">Multi-Module Project Layout</h2>
+                    <p class="text-zinc-400 text-sm leading-relaxed">
+                        Our codebase leverages parent/child boundaries cleanly. The introduction of <code>mmm-report</code> acts as a code-free aggregation point.
+                    </p>
+                    
+                    <div class="relative">
+                        <div class="absolute top-2 right-2 z-10">
+                            <button onclick="copyToClipboard('code-layout')" class="bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white px-2.5 py-1 rounded-md text-xs flex items-center space-x-1 border border-zinc-700 transition">
+                                <i data-lucide="copy" class="w-3.5 h-3.5"></i>
+                                <span>Copy</span>
+                            </button>
+                        </div>
+                        <pre class="language-plaintext"><code id="code-layout" class="language-plaintext">. (Root Aggregator)
+├── .gitlab-ci.yml           # Root Orchestrator
+├── .gitlab-ci-base.yml      # Central CI Blueprint
+├── pom.xml                  # Root Aggregator POM
+├── parent-pom/              # Shared configuration & dependency management
+│   └── pom.xml
+└── project/                 # Functional module aggregator
+    ├── pom.xml
+    ├── mmm-security/        # Foundation module
+    │   ├── .gitlab-ci.yml   # Child Pipeline
+    │   └── pom.xml
+    ├── mmm-core/            # Core application module
+    │   ├── .gitlab-ci.yml   # Child Pipeline
+    │   └── pom.xml
+    ├── mmm-search/          # Search module
+    │   ├── .gitlab-ci.yml   # Child Pipeline
+    │   └── pom.xml
+    └── mmm-report/          # Coverage reporter (Ghost Aggregator)
+        └── pom.xml</code></pre>
+                    </div>
+                </article>
+
+                <!-- Root Orchestrator -->
+                <article id="sec-orchestrator" class="bg-zinc-900/40 border border-zinc-800 rounded-2xl p-6 sm:p-8 space-y-4">
+                    <div class="flex items-center space-x-2 text-indigo-400">
+                        <i data-lucide="git-fork" class="w-5 h-5"></i>
+                        <span class="text-xs uppercase tracking-wider font-bold">Root Config</span>
+                    </div>
+                    <h2 class="text-2xl font-bold">Root Orchestrator Configuration</h2>
+                    <p class="text-zinc-400 text-sm leading-relaxed">
+                        The core router (`.gitlab-ci.yml`) determines the stage sequence, defines trigger criteria, and filters target paths to avoid running tests for unchanged directories.
+                    </p>
+
+                    <div class="relative">
+                        <div class="absolute top-2 right-2 z-10">
+                            <button onclick="copyToClipboard('code-orchestrator')" class="bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white px-2.5 py-1 rounded-md text-xs flex items-center space-x-1 border border-zinc-700 transition">
+                                <i data-lucide="copy" class="w-3.5 h-3.5"></i>
+                                <span>Copy</span>
+                            </button>
+                        </div>
+                        <pre class="language-yaml"><code id="code-orchestrator" class="language-yaml">workflow:
+  rules:
+    - if: $CI_FULL_PIPELINE == "true"
+    - if: $CI_PIPELINE_SOURCE == "parent_pipeline"
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS # Suppress double pipeline runs
+      when: never
+    - if: $CI_COMMIT_BRANCH
+
+stages:
+  - configuration
+  - foundation
+  - application
+  - test
+  - report
+
+.trigger-rules:
+  rules:
+    - if: "$CI_FULL_PIPELINE == 'true'"
+      when: always
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
+        compare_to: $CI_MERGE_REQUEST_TARGET_BRANCH_NAME
+        paths:
+          - $MODULE_PATH/**/*
+          - parent-pom/**/*
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $CI_COMMIT_BEFORE_SHA != "0000000000000000000000000000000000000000"
+      changes:
+        - $MODULE_PATH/**/*
+        - parent-pom/**/*</code></pre>
+                    </div>
+                </article>
+
+                <!-- Central Blueprint -->
+                <article id="sec-blueprint" class="bg-zinc-900/40 border border-zinc-800 rounded-2xl p-6 sm:p-8 space-y-4">
+                    <div class="flex items-center space-x-2 text-indigo-400">
+                        <i data-lucide="layers" class="w-5 h-5"></i>
+                        <span class="text-xs uppercase tracking-wider font-bold">Templates</span>
+                    </div>
+                    <h2 class="text-2xl font-bold">Central Blueprint & Job Reference Definition</h2>
+                    <p class="text-zinc-400 text-sm leading-relaxed">
+                        Declares global variables, cache strategies, and reusable snippets via <code>!reference</code> tags to streamline child pipeline builds.
+                    </p>
+
+                    <div class="relative">
+                        <div class="absolute top-2 right-2 z-10">
+                            <button onclick="copyToClipboard('code-base')" class="bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white px-2.5 py-1 rounded-md text-xs flex items-center space-x-1 border border-zinc-700 transition">
+                                <i data-lucide="copy" class="w-3.5 h-3.5"></i>
+                                <span>Copy</span>
+                            </button>
+                        </div>
+                        <pre class="language-yaml"><code id="code-base" class="language-yaml">variables:
+  MAVEN_REPO_LOCAL: ".m2/repository"
+  SONAR_USER_HOME: ".sonar"
+  MAVEN_OPTS: "-Dhttps.protocols=TLSv1.2 -Djava.awt.headless=true -Xmx2048m -XX:+TieredCompilation -XX:TieredStopAtLevel=1"
+  MAVEN_CLI_OPTS: "--batch-mode --errors --fail-at-end --show-version --no-transfer-progress --threads 1C -DinstallAtEnd=true -DdeployAtEnd=true"
+  FF_USE_FASTZIP: "true"
+  ARTIFACT_COMPRESSION_LEVEL: "fast"
+  CACHE_COMPRESSION_LEVEL: "fast"
+
+cache:
+  key: "maven-$CI_COMMIT_REF_SLUG"
+  paths:
+    - .m2/repository/
+  policy: pull-push</code></pre>
+                    </div>
+                </article>
+
+                <!-- Lock Safety & Rollbacks -->
+                <article id="sec-rollbacks" class="bg-zinc-900/40 border border-zinc-800 rounded-2xl p-6 sm:p-8 space-y-4">
+                    <div class="flex items-center space-x-2 text-rose-400">
+                        <i data-lucide="rotate-ccw" class="w-5 h-5"></i>
+                        <span class="text-xs uppercase tracking-wider font-bold">Deployment Rollbacks</span>
+                    </div>
+                    <h2 class="text-2xl font-bold">Resource Locking & Emergency Rollbacks</h2>
+                    <p class="text-zinc-400 text-sm leading-relaxed">
+                        To avoid concurrent deployment race conditions, we use resource groups to serialize operations, paired with manual rollback fallback commands using standard <code>kubectl rollout undo</code> actions.
+                    </p>
+
+                    <div class="relative">
+                        <div class="absolute top-2 right-2 z-10">
+                            <button onclick="copyToClipboard('code-rollback-details')" class="bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white px-2.5 py-1 rounded-md text-xs flex items-center space-x-1 border border-zinc-700 transition">
+                                <i data-lucide="copy" class="w-3.5 h-3.5"></i>
+                                <span>Copy</span>
+                            </button>
+                        </div>
+                        <pre class="language-yaml"><code id="code-rollback-details" class="language-yaml">deploy-manifests-prod:
+  extends: .deploy-cluster-template
+  stage: deploy
+  resource_group: core-deploy-prod
+  environment:
+    name: prod
+  script:
+    - kubectl apply -k project/mmm-core/k8s/overlays/prod
+
+rollback-prod:
+  extends: .rollback-template
+  stage: rollback
+  needs: ["deploy-manifests-prod"]
+  when: manual
+  resource_group: core-deploy-prod
+  variables:
+    DEPLOYMENT_NAME: "mmm-core"
+    K8S_NAMESPACE: "prod"
+  script:
+    - echo "Executing rollback deployment revert..."
+    - kubectl rollout undo deployment/$DEPLOYMENT_NAME -n $K8S_NAMESPACE</code></pre>
+                    </div>
+                </article>
+
+                <!-- Shift Left Security -->
+                <article id="sec-sast" class="bg-zinc-900/40 border border-zinc-800 rounded-2xl p-6 sm:p-8 space-y-4">
+                    <div class="flex items-center space-x-2 text-emerald-400">
+                        <i data-lucide="shield-check" class="w-5 h-5"></i>
+                        <span class="text-xs uppercase tracking-wider font-bold">Security Analysis</span>
+                    </div>
+                    <h2 class="text-2xl font-bold">Shift-Left Security & SonarQube Project Splitting</h2>
+                    <p class="text-zinc-400 text-sm leading-relaxed">
+                        Incorporate GitLab's SAST and Secret-Detection templates natively while ensuring SonarQube scopes compile independently on targeted modules.
+                    </p>
+
+                    <div class="relative">
+                        <div class="absolute top-2 right-2 z-10">
+                            <button onclick="copyToClipboard('code-sast-sample')" class="bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white px-2.5 py-1 rounded-md text-xs flex items-center space-x-1 border border-zinc-700 transition">
+                                <i data-lucide="copy" class="w-3.5 h-3.5"></i>
+                                <span>Copy</span>
+                            </button>
+                        </div>
+                        <pre class="language-yaml"><code id="code-sast-sample" class="language-yaml">include:
+  - template: Jobs/SAST.gitlab-ci.yml
+  - template: Jobs/Secret-Detection.gitlab-ci.yml
+  - template: Security/Dependency-Scanning.gitlab-ci.yml</code></pre>
+                    </div>
+                </article>
+
+            </div>
+        </section>
+
+        <!-- TAB 3: CONFIG GENERATOR -->
+        <section id="tab-content-generator" class="hidden space-y-6">
+            <div class="bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
+                <div class="max-w-xl mb-6">
+                    <h2 class="text-2xl font-bold">Interactive CI Blueprint Config Builder</h2>
+                    <p class="text-zinc-400 text-sm mt-1">
+                        Configure pipeline performance options interactively below. See how optimization tweaks immediately update your reusable `.gitlab-ci-base.yml` configuration template.
+                    </p>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                    <!-- Config Controls -->
+                    <div class="lg:col-span-4 space-y-5 bg-zinc-950 p-5 rounded-xl border border-zinc-800">
+                        <h3 class="text-xs font-bold text-zinc-400 uppercase tracking-wider">Control Panel</h3>
+                        
+                        <!-- Toggle FastZip -->
+                        <div class="space-y-1.5">
+                            <label class="flex items-center justify-between cursor-pointer">
+                                <span class="text-sm font-semibold text-zinc-200">Enable GitLab FastZip</span>
+                                <input type="checkbox" id="gen-fastzip" checked class="sr-only peer" onchange="updateGeneratedConfig()">
+                                <div class="relative w-9 h-5 bg-zinc-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div>
+                            </label>
+                            <p class="text-xs text-zinc-500">Accelerates artifact/cache packing speed under heavy monorepos.</p>
+                        </div>
+
+                        <!-- Compression Strength -->
+                        <div class="space-y-2">
+                            <label class="text-sm font-semibold text-zinc-200 block">Compression Strategy</label>
+                            <select id="gen-compression" onchange="updateGeneratedConfig()" class="w-full bg-zinc-900 border border-zinc-800 text-zinc-200 text-xs rounded-lg p-2 focus:ring-1 focus:ring-brand-500 focus:outline-none">
+                                <option value="fast" selected>fast (Recommended for run speed)</option>
+                                <option value="slow">slow (Maximizes storage space)</option>
+                                <option value="none">none (Disable compression)</option>
+                            </select>
+                        </div>
+
+                        <!-- Parallel Build Threads -->
+                        <div class="space-y-2">
+                            <label class="text-sm font-semibold text-zinc-200 block">Maven Build Concurrency</label>
+                            <select id="gen-threads" onchange="updateGeneratedConfig()" class="w-full bg-zinc-900 border border-zinc-800 text-zinc-200 text-xs rounded-lg p-2 focus:ring-1 focus:ring-brand-500 focus:outline-none">
+                                <option value="1">1 Thread (Single Core)</option>
+                                <option value="1C" selected>1C (1 Thread per available CPU Core)</option>
+                                <option value="2C">2C (2 Threads per CPU Core)</option>
+                            </select>
+                        </div>
+
+                        <!-- Safe Locks Option -->
+                        <div class="space-y-1.5">
+                            <label class="flex items-center justify-between cursor-pointer">
+                                <span class="text-sm font-semibold text-zinc-200">Enable Safe Deploy Locks</span>
+                                <input type="checkbox" id="gen-locks" checked class="sr-only peer" onchange="updateGeneratedConfig()">
+                                <div class="relative w-9 h-5 bg-zinc-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div>
+                            </label>
+                            <p class="text-xs text-zinc-500">Adds module-specific resource locking to secure production deployments.</p>
+                        </div>
+                    </div>
+
+                    <!-- Config Preview -->
+                    <div class="lg:col-span-8 flex flex-col justify-between">
+                        <div>
+                            <div class="flex items-center justify-between mb-3">
+                                <h3 class="text-xs font-bold text-zinc-300 uppercase tracking-wider flex items-center space-x-1.5">
+                                    <span class="w-1.5 h-1.5 rounded-full bg-indigo-500"></span>
+                                    <span>Generated .gitlab-ci-base.yml</span>
+                                </h3>
+                                <button onclick="copyToClipboard('generated-yaml')" class="text-xs bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white px-2.5 py-1 rounded border border-zinc-700 flex items-center space-x-1 transition">
+                                    <i data-lucide="copy" class="w-3.5 h-3.5"></i>
+                                    <span>Copy Template</span>
+                                </button>
+                            </div>
+                            <pre class="language-yaml"><code id="generated-yaml" class="language-yaml"># Custom settings applied below</code></pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- TAB 4: KNOWLEDGE CHALLENGE -->
+        <section id="tab-content-quiz" class="hidden">
+            <div class="max-w-2xl mx-auto bg-zinc-900 border border-zinc-800 rounded-2xl p-6 sm:p-8 space-y-6">
+                
+                <div class="text-center space-y-2 pb-6 border-b border-zinc-800">
+                    <div class="mx-auto w-12 h-12 bg-brand-500/10 rounded-full flex items-center justify-center text-brand-400 mb-2 border border-brand-500/20">
+                        <i data-lucide="award" class="w-6 h-6"></i>
+                    </div>
+                    <h2 class="text-2xl font-bold tracking-tight">Team DevOps Knowledge Challenge</h2>
+                    <p class="text-zinc-400 text-sm">
+                        Test your team's grasp of GitLab parent-child orchestrations, caching, and deployment safety rollbacks.
+                    </p>
+                </div>
+
+                <!-- Quiz Interactive Form -->
+                <div id="quiz-block" class="space-y-6">
+                    <!-- Dynamic Question Area -->
+                    <div id="quiz-question-container" class="space-y-4">
+                        <div class="flex items-center justify-between text-xs text-zinc-500 font-bold uppercase tracking-wider">
+                            <span id="quiz-progress-text">Question 1 of 5</span>
+                            <span id="quiz-score-text">Current Score: 0/0</span>
+                        </div>
+                        <h3 id="quiz-question-title" class="text-lg font-semibold text-zinc-100">
+                            Loading Question...
+                        </h3>
+                        <div id="quiz-answers" class="space-y-2 pt-2">
+                            <!-- Injected Answers Buttons -->
+                        </div>
+                    </div>
+
+                    <!-- Feedbacks & Action buttons -->
+                    <div id="quiz-feedback" class="hidden p-4 rounded-xl text-sm font-medium border">
+                        <!-- Dynamic Feedback Text -->
+                    </div>
+
+                    <div class="flex justify-between items-center pt-4 border-t border-zinc-800">
+                        <button id="btn-quiz-skip" onclick="restartQuiz()" class="text-xs text-zinc-400 hover:text-white transition">
+                            Restart Quiz
+                        </button>
+                        <button id="btn-quiz-next" onclick="nextQuizQuestion()" disabled class="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:hover:bg-indigo-600 text-white text-xs font-semibold px-4 py-2 rounded-lg transition flex items-center space-x-1">
+                            <span>Next Question</span>
+                            <i data-lucide="arrow-right" class="w-3.5 h-3.5"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Quiz Results Summary -->
+                <div id="quiz-results" class="hidden text-center space-y-6 py-6">
+                    <div class="text-6xl" id="quiz-emoji">🎉</div>
+                    <div class="space-y-2">
+                        <h3 class="text-xl font-bold text-zinc-100">Challenge Completed!</h3>
+                        <p class="text-sm text-zinc-400">
+                            Your Team score is <span id="quiz-final-score" class="font-mono font-bold text-indigo-400 text-lg">0/5</span>
+                        </p>
+                        <p id="quiz-evaluation-text" class="text-xs text-zinc-500 px-4 leading-normal">
+                            Excellent! You're ready to implement modular optimization strategies across your company registries.
+                        </p>
+                    </div>
+                    <button onclick="restartQuiz()" class="bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 text-xs font-semibold px-5 py-2.5 rounded-lg transition">
+                        Retake Challenge
+                    </button>
+                </div>
+
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Page Footer -->
+    <footer class="border-t border-zinc-800 bg-zinc-950 py-6 px-4">
+        <div class="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-zinc-500">
+            <div class="flex items-center space-x-2">
+                <i data-lucide="terminal" class="w-4 h-4 text-orange-500"></i>
+                <span>Designed for Modern DevSecOps Monorepos</span>
+            </div>
+            <div>
+                <span>Shared with ❤️ for the Engineering Team</span>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Prism JS Library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-yaml.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-xml-doc.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-bash.min.js"></script>
+
+    <!-- Interactive Logic Controller -->
+    <script>
+        // Tab switching logic
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.remove('text-white', 'bg-zinc-800', 'shadow');
+                btn.classList.add('text-zinc-400', 'hover:text-white');
+            });
+            const activeBtn = document.getElementById(`btn-tab-${tabId}`);
+            if (activeBtn) {
+                activeBtn.classList.remove('text-zinc-400', 'hover:text-white');
+                activeBtn.classList.add('text-white', 'bg-zinc-800', 'shadow');
+            }
+
+            // Toggle sections
+            document.getElementById('tab-content-simulator').classList.add('hidden');
+            document.getElementById('tab-content-playbook').classList.add('hidden');
+            document.getElementById('tab-content-generator').classList.add('hidden');
+            document.getElementById('tab-content-quiz').classList.add('hidden');
+
+            document.getElementById(`tab-content-${tabId}`).classList.remove('hidden');
+
+            if (tabId === 'generator') {
+                updateGeneratedConfig();
+            }
+        }
+
+        // Section scrolling in playbook
+        function scrollToSection(elementId) {
+            const el = document.getElementById(elementId);
+            if (el) {
+                el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+        }
+
+        // Toast feedback notifier
+        function showToast(message, type = 'success') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = `p-3 rounded-xl border text-xs font-semibold shadow-lg transition-all duration-300 transform translate-y-2 opacity-0 flex items-center space-x-2 pointer-events-auto max-w-sm ${
+                type === 'success' 
+                    ? 'bg-zinc-900 border-emerald-500/30 text-emerald-400' 
+                    : type === 'rollback' 
+                    ? 'bg-zinc-900 border-rose-500/30 text-rose-400'
+                    : 'bg-zinc-900 border-brand-500/30 text-brand-400'
+            }`;
+            
+            const icon = type === 'success' ? 'check-circle' : type === 'rollback' ? 'shield-alert' : 'info';
+            toast.innerHTML = `
+                <i data-lucide="${icon}" class="w-4 h-4 shrink-0"></i>
+                <span>${message}</span>
+            `;
+            container.appendChild(toast);
+            lucide.createIcons();
+            
+            // Animate in
+            setTimeout(() => {
+                toast.classList.remove('translate-y-2', 'opacity-0');
+            }, 50);
+
+            // Animate out
+            setTimeout(() => {
+                toast.classList.add('translate-y-2', 'opacity-0');
+                setTimeout(() => toast.remove(), 300);
+            }, 3500);
+        }
+
+        // Copy to clipboard fallback handler
+        function copyToClipboard(elementId) {
+            const codeText = document.getElementById(elementId).innerText;
+            const tempTextArea = document.createElement("textarea");
+            tempTextArea.value = codeText;
+            document.body.appendChild(tempTextArea);
+            tempTextArea.select();
+            try {
+                document.execCommand("copy");
+                showToast("Code copied to clipboard!", 'success');
+            } catch (err) {
+                showToast("Failed to copy automatically.", 'error');
+            }
+            document.body.removeChild(tempTextArea);
+        }
+
+        // SIMULATOR WORKFLOW LOGIC
+        let isMainBranch = true;
+        const logArea = document.getElementById('terminal-log');
+
+        function appendLog(text, colorClass = 'text-zinc-300') {
+            const entry = document.createElement('div');
+            entry.className = `py-0.5 ${colorClass}`;
+            entry.innerHTML = `<span class="text-zinc-600 mr-2">[${new Date().toLocaleTimeString()}]</span>${text}`;
+            logArea.appendChild(entry);
+            logArea.scrollTop = logArea.scrollHeight;
+        }
+
+        function toggleBranch() {
+            isMainBranch = !isMainBranch;
+            const branchLabel = document.getElementById('active-branch');
+            branchLabel.textContent = isMainBranch ? 'main' : 'feature/auth-service';
+            appendLog(`Branch switched context to: <strong class="text-zinc-200">${isMainBranch ? 'main' : 'feature/auth-service'}</strong>`, 'text-indigo-400');
+        }
+
+        function resetSimulator() {
+            const nodes = ['config', 'foundation', 'app', 'deploy', 'rollback'];
+            nodes.forEach(n => {
+                const el = document.getElementById(`node-${n}`);
+                if (el) {
+                    el.className = "w-12 h-12 rounded-xl bg-zinc-800 border-2 border-zinc-700 flex items-center justify-center transition-all duration-300 shadow";
+                    const icon = el.querySelector('i') || el.querySelector('svg');
+                    if (icon) {
+                        icon.setAttribute('class', "w-5 h-5 text-zinc-400 lucide");
+                    }
+                }
+            });
+            document.getElementById('flow-line').classList.add('hidden');
+            document.getElementById('flow-line').classList.remove('flow-active');
+            document.getElementById('pipeline-status-badge').className = "font-mono text-zinc-500 font-bold px-2 py-0.5 bg-zinc-950 rounded";
+            document.getElementById('pipeline-status-badge').textContent = "IDLE";
+            document.getElementById('last-change-label').textContent = "None. Click a module above!";
+            document.getElementById('metric-lock-status').className = "text-zinc-500 leading-normal";
+            document.getElementById('metric-lock-status').textContent = "Mutex lock 'core-deploy-prod' prevents race conditions on deployments.";
+
+            logArea.innerHTML = '<div class="text-zinc-600">[info] Ready for simulation. Trigger a module in the monorepo directory to begin.</div>';
+            showToast("Simulator status reset.", "info");
+        }
+
+        function triggerNode(nodeId, status = 'running') {
+            const el = document.getElementById(`node-${nodeId}`);
+            if (!el) return;
+
+            const icon = el.querySelector('i') || el.querySelector('svg');
+            
+            if (status === 'running') {
+                el.className = "w-12 h-12 rounded-xl bg-indigo-950 border-2 border-indigo-500 flex items-center justify-center transition-all duration-300 shadow shadow-indigo-500/20 animate-pulse";
+                if (icon) icon.setAttribute('class', "w-5 h-5 text-indigo-400 lucide");
+            } else if (status === 'success') {
+                el.className = "w-12 h-12 rounded-xl bg-emerald-950 border-2 border-emerald-500 flex items-center justify-center transition-all duration-300 shadow shadow-emerald-500/10";
+                if (icon) icon.setAttribute('class', "w-5 h-5 text-emerald-400 lucide");
+            } else if (status === 'skipped') {
+                el.className = "w-12 h-12 rounded-xl bg-zinc-900 border-2 border-zinc-800/40 opacity-40 flex items-center justify-center transition-all duration-300";
+                if (icon) icon.setAttribute('class', "w-5 h-5 text-zinc-600 lucide");
+            } else if (status === 'rollback') {
+                el.className = "w-12 h-12 rounded-xl bg-rose-950 border-2 border-rose-500 flex items-center justify-center transition-all duration-300 shadow shadow-rose-500/20";
+                if (icon) icon.setAttribute('class', "w-5 h-5 text-rose-400 lucide");
+            }
+        }
+
+        function simulateChange(moduleKey) {
+            resetSimulator();
+            
+            document.getElementById('pipeline-status-badge').className = "font-mono text-indigo-400 font-bold px-2 py-0.5 bg-zinc-950 rounded animate-pulse";
+            document.getElementById('pipeline-status-badge').textContent = "RUNNING";
+
+            let labelText = "";
+            if (moduleKey === 'parent-pom') {
+                labelText = "parent-pom/pom.xml changed";
+            } else if (moduleKey === 'mmm-security') {
+                labelText = "project/mmm-security/**/* changed";
+            } else if (moduleKey === 'mmm-core') {
+                labelText = "project/mmm-core/**/* changed";
+            } else if (moduleKey === 'mmm-search') {
+                labelText = "project/mmm-search/**/* changed";
+            } else if (moduleKey === 'mmm-report') {
+                labelText = "project/mmm-report/**/* changed (Ghost Aggregator)";
+            }
+
+            document.getElementById('last-change-label').textContent = labelText;
+            
+            const flowLine = document.getElementById('flow-line');
+            flowLine.classList.remove('hidden');
+            flowLine.classList.add('flow-active');
+
+            appendLog(`File event matched: <span class="text-white font-mono">${labelText}</span>`, 'text-zinc-300');
+            appendLog(`Evaluating workflow for branch <code class="text-indigo-400 font-mono">${isMainBranch ? 'main' : 'feature/auth-service'}</code>`, 'text-zinc-400');
+
+            setTimeout(() => {
+                if (moduleKey === 'parent-pom') {
+                    triggerNode('config', 'success');
+                    appendLog(`[SNAPSHOT] Updated configuration mappings. Deploying updated parent-pom descriptors.`, 'text-indigo-300');
+                } else {
+                    triggerNode('config', 'skipped');
+                    appendLog(`[BYPASS] Parent configurations unchanged. Skipping global descriptor deployment.`, 'text-zinc-500');
+                }
+            }, 600);
+
+            setTimeout(() => {
+                if (moduleKey === 'parent-pom' || moduleKey === 'mmm-security') {
+                    triggerNode('foundation', 'success');
+                    appendLog(`[COMPILE] Running child task sequence for module: <strong class="text-emerald-400">mmm-security</strong>`, 'text-zinc-200');
+                } else {
+                    triggerNode('foundation', 'skipped');
+                    appendLog(`[BYPASS] Skipping foundation checks (no matching changes detected).`, 'text-zinc-500');
+                }
+            }, 1200);
+
+            setTimeout(() => {
+                if (moduleKey === 'parent-pom' || moduleKey === 'mmm-core' || moduleKey === 'mmm-search' || moduleKey === 'mmm-report') {
+                    triggerNode('app', 'success');
+                    if (moduleKey === 'mmm-core') {
+                        appendLog(`[COMPILE] Compiling target <strong class="text-blue-400">mmm-core</strong> in isolated workspace.`, 'text-zinc-200');
+                        appendLog(`[CACHE] Local maven repository matched: pulled from <code class="text-zinc-300">maven-$CI_COMMIT_REF_SLUG</code>`, 'text-emerald-400');
+                    } else if (moduleKey === 'mmm-search') {
+                        appendLog(`[COMPILE] Compiling target <strong class="text-purple-400">mmm-search</strong> in isolated workspace.`, 'text-zinc-200');
+                    } else {
+                        appendLog(`[AGGREGATE] Pulling child artifacts via bridge token endpoints...`, 'text-zinc-400');
+                    }
+                } else {
+                    triggerNode('app', 'skipped');
+                    appendLog(`[BYPASS] Sibling applications compiled & skipped natively.`, 'text-zinc-500');
+                }
+            }, 1800);
+
+            setTimeout(() => {
+                if (moduleKey === 'mmm-core') {
+                    triggerNode('deploy', 'success');
+                    appendLog(`[DEPLOY] Acquiring environment lock: <span class="text-indigo-400">core-deploy-prod</span>`, 'text-indigo-300');
+                    appendLog(`[DEPLOY] Executing: <code class="text-zinc-400">kubectl apply -k overlays/prod</code>`, 'text-zinc-300');
+                    document.getElementById('metric-lock-status').innerHTML = `<span class="text-emerald-400 font-bold">Lock Acquired</span>: core-deploy-prod active. Deployment safe from race conditions.`;
+                } else {
+                    triggerNode('deploy', 'skipped');
+                    appendLog(`[BYPASS] Production workspace deployment step skipped.`, 'text-zinc-500');
+                }
+            }, 2400);
+
+            setTimeout(() => {
+                triggerNode('rollback', 'skipped');
+                document.getElementById('pipeline-status-badge').className = "font-mono text-emerald-400 font-bold px-2 py-0.5 bg-zinc-950 rounded";
+                document.getElementById('pipeline-status-badge').textContent = "SUCCESS";
+                flowLine.classList.remove('flow-active');
+                showToast("Pipeline completed successfully!", "success");
+            }, 3000);
+        }
+
+        function triggerEmergencyRollback() {
+            resetSimulator();
+            document.getElementById('pipeline-status-badge').className = "font-mono text-red-500 font-bold px-2 py-0.5 bg-zinc-950 rounded animate-pulse";
+            document.getElementById('pipeline-status-badge').textContent = "REVERTING";
+            document.getElementById('last-change-label').textContent = "Emergency Rollback Executed";
+
+            const flowLine = document.getElementById('flow-line');
+            flowLine.classList.remove('hidden');
+            flowLine.classList.add('flow-active');
+
+            appendLog(`EMERGENCY: Manual rollback action triggered by operator.`, 'text-rose-400 font-bold');
+            
+            setTimeout(() => {
+                triggerNode('config', 'skipped');
+                triggerNode('foundation', 'skipped');
+                triggerNode('app', 'skipped');
+            }, 400);
+
+            setTimeout(() => {
+                triggerNode('deploy', 'rollback');
+                appendLog(`[LOCK] Re-acquiring env deployment lock: <span class="text-indigo-300">core-deploy-prod</span>`, 'text-zinc-400');
+                document.getElementById('metric-lock-status').innerHTML = `<span class="text-rose-400 font-bold">Lock Locked</span>: Serialized revert in progress.`;
+            }, 900);
+
+            setTimeout(() => {
+                triggerNode('rollback', 'success');
+                appendLog(`[ROLLBACK] Executing command: <code class="text-white">kubectl rollout undo deployment/mmm-core -n prod</code>`, 'text-rose-300');
+                appendLog(`[ROLLBACK] Reverted deployment revision to previous stable build. Deployment safe.`, 'text-emerald-400');
+                
+                document.getElementById('pipeline-status-badge').className = "font-mono text-emerald-400 font-bold px-2 py-0.5 bg-zinc-950 rounded";
+                document.getElementById('pipeline-status-badge').textContent = "REVERTED";
+                flowLine.classList.remove('flow-active');
+                showToast("Kubernetes deployment reverted!", "rollback");
+            }, 2000);
+        }
+
+        function triggerFullPipeline() {
+            resetSimulator();
+            document.getElementById('pipeline-status-badge').className = "font-mono text-indigo-400 font-bold px-2 py-0.5 bg-zinc-950 rounded animate-pulse";
+            document.getElementById('pipeline-status-badge').textContent = "RUNNING";
+            document.getElementById('last-change-label').textContent = "$CI_FULL_PIPELINE Override Enabled";
+
+            const flowLine = document.getElementById('flow-line');
+            flowLine.classList.remove('hidden');
+            flowLine.classList.add('flow-active');
+
+            appendLog(`FORCE MANUAL RUN: <span class="text-orange-400 font-mono">CI_FULL_PIPELINE == "true"</span>`, 'text-zinc-200');
+            appendLog(`Global change-detection rules bypassed. Forcing execution across all modules.`, 'text-zinc-400');
+
+            setTimeout(() => { 
+                triggerNode('config', 'success'); 
+                appendLog(`[STAMP] Stage configuration: Deploying shared configurations to repository coordinates.`, 'text-indigo-300');
+                appendLog(`Executing: <code class="text-zinc-400">mvn $MAVEN_CLI_OPTS deploy -pl parent-pom</code>`, 'text-zinc-500');
+            }, 600);
+
+            setTimeout(() => { 
+                triggerNode('foundation', 'success'); 
+                appendLog(`[STAMP] Stage foundation: Building foundation module <strong class="text-emerald-400">mmm-security</strong>.`, 'text-zinc-200');
+                appendLog(`Executing: <code class="text-zinc-400">mvn $MAVEN_CLI_OPTS verify -pl project/mmm-security -am</code>`, 'text-zinc-500');
+            }, 1200);
+
+            setTimeout(() => { 
+                triggerNode('app', 'success'); 
+                appendLog(`[STAMP] Stage application: Compiling and verifying sibling application modules concurrently (<strong class="text-blue-400">mmm-core</strong> & <strong class="text-purple-400">mmm-search</strong>).`, 'text-zinc-200');
+                appendLog(`Executing: <code class="text-zinc-400">mvn $MAVEN_CLI_OPTS verify -pl project/mmm-core,project/mmm-search -am</code>`, 'text-zinc-500');
+            }, 1800);
+
+            setTimeout(() => { 
+                triggerNode('deploy', 'success'); 
+                appendLog(`[STAMP] Stage deploy: Deploying artifacts and production overlays.`, 'text-zinc-200');
+                appendLog(`Acquiring resource lock <span class="text-indigo-400">core-deploy-prod</span>... Success.`, 'text-indigo-300');
+                appendLog(`Executing: <code class="text-zinc-400">kubectl apply -k project/mmm-core/k8s/overlays/prod</code>`, 'text-zinc-500');
+                document.getElementById('metric-lock-status').innerHTML = `<span class="text-emerald-400 font-bold">Lock Acquired</span>: core-deploy-prod active. All modules deployed via manual override.`;
+            }, 2400);
+
+            setTimeout(() => { 
+                triggerNode('rollback', 'skipped'); 
+                appendLog(`[STAMP] Stage report: Pulling aggregate reports into <strong class="text-teal-400">mmm-report</strong> (Ghost Aggregator).`, 'text-zinc-400');
+                appendLog(`SUCCESS: All jobs executed successfully under global override flag.`, 'text-emerald-400');
+                document.getElementById('pipeline-status-badge').className = "font-mono text-emerald-400 font-bold px-2 py-0.5 bg-zinc-950 rounded";
+                document.getElementById('pipeline-status-badge').textContent = "SUCCESS";
+                flowLine.classList.remove('flow-active');
+                showToast("Manual override finished successfully!", "success");
+            }, 3000);
+        }
+
+        // CONFIG BUILDER GENERATOR
+        function updateGeneratedConfig() {
+            const enableFastZip = document.getElementById('gen-fastzip').checked;
+            const compression = document.getElementById('gen-compression').value;
+            const threads = document.getElementById('gen-threads').value;
+            const locksEnabled = document.getElementById('gen-locks').checked;
+
+            const codeString = `spec:
+  inputs:
+    full_pipeline:
+      default: "false"
+
+variables:
+  MAVEN_REPO_LOCAL: ".m2/repository"
+  SONAR_USER_HOME: ".sonar"
+  
+  MAVEN_OPTS: >-
+    -Dhttps.protocols=TLSv1.2
+    -Djava.awt.headless=true
+    -Xmx2048m
+    -XX:+TieredCompilation
+    -XX:TieredStopAtLevel=1
+
+  MAVEN_CLI_OPTS: >-
+    --batch-mode
+    --errors
+    --fail-at-end
+    --show-version
+    --no-transfer-progress
+    --threads ${threads}
+    -DinstallAtEnd=true
+    -DdeployAtEnd=true
+
+  FF_USE_FASTZIP: "${enableFastZip}"
+  ARTIFACT_COMPRESSION_LEVEL: "${compression}"
+  CACHE_COMPRESSION_LEVEL: "${compression}"
+
+cache:
+  key: "maven-$CI_COMMIT_REF_SLUG"
+  paths:
+    - .m2/repository/
+  policy: pull-push
+
+${locksEnabled ? `deploy-manifests-prod:
+  stage: deploy
+  resource_group: core-deploy-prod
+  environment:
+    name: prod
+  script:
+    - kubectl apply -k project/mmm-core/k8s/overlays/prod
+
+rollback-prod:
+  stage: rollback
+  needs: ["deploy-manifests-prod"]
+  when: manual
+  resource_group: core-deploy-prod
+  variables:
+    DEPLOYMENT_NAME: "mmm-core"
+    K8S_NAMESPACE: "prod"
+  script:
+    - kubectl rollout undo deployment/\$DEPLOYMENT_NAME -n \$K8S_NAMESPACE` : ''}`;
+
+            const genBox = document.getElementById('generated-yaml');
+            genBox.textContent = codeString;
+            Prism.highlightElement(genBox);
+        }
+
+        // KNOWLEDGE CHALLENGE QUIZ DATA & CONTROLLER
+        const quizData = [
+            {
+                question: "How do you effectively suppress 'Double Pipelines' (running both branch and MR pipelines for the same commit) in GitLab CI?",
+                answers: [
+                    { text: "By using the cache:policy parameters directly inside children definitions.", correct: false },
+                    { text: "Combining conditions in root workflows like: $CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS set to when: never.", correct: true },
+                    { text: "Triggering jobs only if the master registry matches default keys.", correct: false },
+                    { text: "Setting artifacts:expire_in: 1 hour on build actions.", correct: false }
+                ],
+                explanation: "Using root workflow rules to identify when both a push branch event and an open merge request exist for the same commit, and setting when: never, safely prevents duplicate pipeline instances."
+            },
+            {
+                question: "What issue prevents child pipelines from sharing standard artifacts directly in GitLab?",
+                answers: [
+                    { text: "Child pipelines automatically build on different branch slugs.", correct: false },
+                    { text: "Standard security tokens expire instantly in mono-repositories.", correct: false },
+                    { text: "Downstream child pipelines run in isolated workspace directories.", correct: true },
+                    { text: "GitLab forbids the use of YAML anchors for children.", correct: false }
+                ],
+                explanation: "Because child pipelines are completely isolated executions, standard relative paths and standard artifact recovery structures cannot cross boundaries natively. This requires an API-based bridge collection strategy."
+            },
+            {
+                question: "What is the primary advantage of the !reference tag over traditional YAML anchors in GitLab?",
+                answers: [
+                    { text: "It allows choosing and merging specific key blocks, like importing only the script array.", correct: true },
+                    { text: "It compiles 10x faster on standard Maven containers.", correct: false },
+                    { text: "It allows passing sensitive API tokens securely.", correct: false },
+                    { text: "It avoids the need to specify cache key values.", correct: false }
+                ],
+                explanation: "YAML anchors are native and import the entire block. GitLab-specific !reference tags allow surgically extracting specific elements (like a script sequence) from any other defined job template."
+            },
+            {
+                question: "How does resource_group help coordinate deployments across parallel pipelines?",
+                answers: [
+                    { text: "It serializes deployments sharing the lock name to prevent deployment race conditions.", correct: true },
+                    { text: "It automatically compiles base Maven POM artifacts.", correct: false },
+                    { text: "It bypasses Kubernetes node configuration requirements.", correct: false },
+                    { text: "It skips security vulnerability evaluations on container registers.", correct: false }
+                ],
+                explanation: "GitLab acts as a mutex coordinator using resource_group, allowing safe concurrent execution across unrelated modules while serializing deployments targeting identical variables."
+            },
+            {
+                question: "What Kubernetes action triggers the 'Rollback/Panic Button' action?",
+                answers: [
+                    { text: "kubectl rollout undo deployment/DEPLOY_NAME", correct: true },
+                    { text: "kubectl delete deployment/DEPLOY_NAME", correct: false },
+                    { text: "kubectl force restart statefulset/DEPLOY_NAME", correct: false },
+                    { text: "mvn clean deploy --fail-fast", correct: false }
+                ],
+                explanation: "kubectl rollout undo reverts the target deployment to the previous revision history in the cluster, restoring stable operational targets in seconds."
+            }
+        ];
+
+        let currentQuestionIndex = 0;
+        let score = 0;
+        let answered = false;
+
+        function initQuiz() {
+            currentQuestionIndex = 0;
+            score = 0;
+            answered = false;
+            
+            document.getElementById('quiz-block').classList.remove('hidden');
+            document.getElementById('quiz-results').classList.add('hidden');
+            document.getElementById('btn-quiz-next').disabled = true;
+
+            showQuestion();
+        }
+
+        function showQuestion() {
+            answered = false;
+            document.getElementById('btn-quiz-next').disabled = true;
+            document.getElementById('quiz-feedback').classList.add('hidden');
+
+            const current = quizData[currentQuestionIndex];
+            document.getElementById('quiz-progress-text').textContent = `Question ${currentQuestionIndex + 1} of ${quizData.length}`;
+            document.getElementById('quiz-score-text').textContent = `Current Score: ${score}/${currentQuestionIndex}`;
+            document.getElementById('quiz-question-title').textContent = current.question;
+
+            const answersDiv = document.getElementById('quiz-answers');
+            answersDiv.innerHTML = '';
+
+            current.answers.forEach((ans, index) => {
+                const btn = document.createElement('button');
+                btn.className = "w-full text-left p-3.5 rounded-xl border border-zinc-800 bg-zinc-900/60 hover:bg-zinc-800 hover:border-zinc-700 transition text-sm flex items-start space-x-3";
+                btn.onclick = () => selectAnswer(index);
+                btn.innerHTML = `
+                    <span class="w-5 h-5 rounded-full border border-zinc-700 flex items-center justify-center text-xs shrink-0 bg-zinc-950 text-zinc-400 font-bold font-mono">
+                        ${String.fromCharCode(65 + index)}
+                    </span>
+                    <span class="text-zinc-300 leading-normal">${ans.text}</span>
+                `;
+                answersDiv.appendChild(btn);
+            });
+        }
+
+        function selectAnswer(selectedIndex) {
+            if (answered) return;
+            answered = true;
+
+            const current = quizData[currentQuestionIndex];
+            const feedbackBox = document.getElementById('quiz-feedback');
+            const buttons = document.getElementById('quiz-answers').querySelectorAll('button');
+
+            const selectedBtn = buttons[selectedIndex];
+            const isCorrect = current.answers[selectedIndex].correct;
+
+            if (isCorrect) {
+                score++;
+                selectedBtn.className = "w-full text-left p-3.5 rounded-xl border border-emerald-500/50 bg-emerald-950/20 text-emerald-300 transition text-sm flex items-start space-x-3";
+                selectedBtn.querySelector('span').className = "w-5 h-5 rounded-full bg-emerald-500 text-zinc-950 flex items-center justify-center text-xs shrink-0 font-bold font-mono";
+                
+                feedbackBox.className = "p-4 rounded-xl text-xs font-normal border bg-emerald-950/10 border-emerald-500/20 text-emerald-300 space-y-1";
+                feedbackBox.innerHTML = `<strong>Correct!</strong> <p>${current.explanation}</p>`;
+            } else {
+                selectedBtn.className = "w-full text-left p-3.5 rounded-xl border border-rose-500/50 bg-rose-950/20 text-rose-300 transition text-sm flex items-start space-x-3";
+                selectedBtn.querySelector('span').className = "w-5 h-5 rounded-full bg-rose-500 text-zinc-950 flex items-center justify-center text-xs shrink-0 font-bold font-mono";
+                
+                current.answers.forEach((ans, idx) => {
+                    if (ans.correct) {
+                        buttons[idx].className = "w-full text-left p-3.5 rounded-xl border border-emerald-500/30 bg-zinc-950/60 text-emerald-400/90 transition text-sm flex items-start space-x-3";
+                    }
+                });
+
+                feedbackBox.className = "p-4 rounded-xl text-xs font-normal border bg-zinc-950 border-zinc-800 text-zinc-400 space-y-1";
+                feedbackBox.innerHTML = `<strong class="text-rose-400">Incorrect!</strong> <p>${current.explanation}</p>`;
+            }
+
+            feedbackBox.classList.remove('hidden');
+            document.getElementById('btn-quiz-next').disabled = false;
+            document.getElementById('quiz-score-text').textContent = `Current Score: ${score}/${currentQuestionIndex + 1}`;
+        }
+
+        function nextQuizQuestion() {
+            currentQuestionIndex++;
+            if (currentQuestionIndex < quizData.length) {
+                showQuestion();
+            } else {
+                showResults();
+            }
+        }
+
+        function showResults() {
+            document.getElementById('quiz-block').classList.add('hidden');
+            document.getElementById('quiz-results').classList.remove('hidden');
+
+            document.getElementById('quiz-final-score').textContent = `${score}/${quizData.length}`;
+
+            const evaluation = document.getElementById('quiz-evaluation-text');
+            const emojiBox = document.getElementById('quiz-emoji');
+
+            if (score === quizData.length) {
+                emojiBox.textContent = "🏆";
+                evaluation.textContent = "Outstanding! You have fully mastered GitLab parent-child pipelines, deployment safety locks, and manual Kubernetes rollback configurations.";
+            } else if (score >= 3) {
+                emojiBox.textContent = "🥈";
+                evaluation.textContent = "Great job! You understand the foundations of change detection, locking strategies, and rollbacks.";
+            } else {
+                emojiBox.textContent = "🎯";
+                evaluation.textContent = "A great starting point! Re-read the locking and rollback sections of the playbook to learn about deployment safety.";
+            }
+        }
+
+        function restartQuiz() {
+            initQuiz();
+        }
+
+        // On document load initializers
+        window.onload = function() {
+            lucide.createIcons();
+            initQuiz();
+            updateGeneratedConfig();
+        }
+    </script>
+</body>
+</html>
